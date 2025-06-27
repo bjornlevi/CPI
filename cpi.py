@@ -123,6 +123,15 @@ def main():
         else:
             print(f"{label:<18} | Not enough data")
 
+    # Compute year-over-year CPI change
+    df["Annual CPI Change"] = df["CPI"].pct_change(periods=12) * 100
+    annual_cpi_changes = df["Annual CPI Change"].dropna()
+
+    avg_annual = annual_cpi_changes.mean()
+    med_annual = annual_cpi_changes.median()
+
+    print(f"\nAverage Annual CPI Inflation (from start): {avg_annual:.2f}%")
+    print(f"Median Annual CPI Inflation (from start): {med_annual:.2f}%")
 
 if __name__ == "__main__":
     main()
