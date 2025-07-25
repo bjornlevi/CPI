@@ -89,6 +89,30 @@ def main():
         "CPI": future_vals
     })], ignore_index=True)
 
+    # Compute monthly change stats
+    now = pd.Timestamp.now()
+    thresholds = {
+        "Last 24 months": df["date"] > (now - pd.DateOffset(months=24)),
+        "Since 2010": df["date"] >= pd.Timestamp("2010-01-01"),
+        "Since 2000": df["date"] >= pd.Timestamp("2000-01-01"),
+        "All time": df["Monthly Change"].notna()
+    }
+
+    print("\nMonthly Inflation Change Stats (based on month-over-month % change in CPI):")
+    print(f"{'Period':<18} | {'Avg Change':>10} | {'Median':>10} | {'Std Dev of Change':>18}")
+    print("-" * 65)
+
+    for label, condition in thresholds.items():
+        sub = df.loc[condition, "Monthly Change"].dropna()
+        if not sub.empty:
+            avg = sub.mean()
+            med = sub.median()
+            std = sub.std()
+            print(f"{label:<18} | {avg:10.2f}% | {med:10.2f}% | {std:18.2f}%")
+        else:
+            print(f"{label:<18} | Not enough data")
+    print("\n")
+
     future_annual = []
     for i in range(len(df24), len(extended)):
         ann = compute_annual_cpi(extended, i)
