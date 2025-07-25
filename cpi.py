@@ -64,43 +64,43 @@ def main():
     df = parse_data(raw)
     df24 = df.tail(24).reset_index(drop=True)
 
-    # Plot CPI
+    # Teikna CPI
     plt.figure(figsize=(10, 6))
-    plt.plot(df24["date"], df24["CPI"], marker='o', label="CPI index")
+    plt.plot(df24["date"], df24["CPI"], marker='o', label="VNV vísitala")
 
     trend_model, futures = compute_trend(df24, months_predict=6)
     future_dates, future_vals = zip(*futures)
-    plt.plot(future_dates, future_vals, '--', color='red', label="Trend projection")
+    plt.plot(future_dates, future_vals, '--', color='red', label="Spáð þróun")
 
-    plt.title("CPI Index and Trend Projection (Last 24 months + next 6)")
-    plt.xlabel("Date")
-    plt.ylabel("CPI Index")
+    plt.title("VNV og spáð þróun (síðustu 24 mánuðir + næstu 6")
+    plt.xlabel("Dagsetning")
+    plt.ylabel("Vísitala neysluverðs")
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
     plt.show()
 
     curr_annual = compute_annual_cpi(df24, end_index=len(df24) - 1)
-    print(f"Current 12‑month CPI inflation ≈ {curr_annual:.2f}%")
-    print(f"Current monthly inflation ≈ {df24.tail(1)["Monthly Change"].values[0]:.2f}%")
-    
+    print(f"Núverandi 12 mánaða verðbólga ≈ {curr_annual:.2f}%")
+    print(f"Núverandi mánaðarverðbólga ≈ {df24.tail(1)['Monthly Change'].values[0]:.2f}%")
+
     extended = pd.concat([df24, pd.DataFrame({
         "date": future_dates,
         "CPI": future_vals
     })], ignore_index=True)
 
-    # Compute monthly change stats
+    # Reikna mánaðarlega breytingu
     now = pd.Timestamp.now()
     thresholds = {
-        "Last 24 months": df["date"] > (now - pd.DateOffset(months=24)),
-        "Since 2010": df["date"] >= pd.Timestamp("2010-01-01"),
-        "Since 2000": df["date"] >= pd.Timestamp("2000-01-01"),
-        "All time": df["Monthly Change"].notna()
+        "Síðustu 24 mánuðir": df["date"] > (now - pd.DateOffset(months=24)),
+        "Frá 2010": df["date"] >= pd.Timestamp("2010-01-01"),
+        "Frá 2000": df["date"] >= pd.Timestamp("2000-01-01"),
+        "Allt tímabilið": df["Monthly Change"].notna()
     }
 
-    print("\nMonthly Inflation Change Stats (based on month-over-month % change in CPI):")
-    print(f"{'Period':<18} | {'Avg Change':>10} | {'Median':>10} | {'Std Dev of Change':>18}")
-    print("-" * 65)
+    print("\nMælingar á mánaðarverðbólgu (% breyting frá fyrri mánuði):")
+    print(f"{'Tímabil':<18} | {'Meðaltal':>10} | {'Miðgildi':>10} | {'Staðalfrávik':>14}")
+    print("-" * 60)
 
     for label, condition in thresholds.items():
         sub = df.loc[condition, "Monthly Change"].dropna()
@@ -108,54 +108,36 @@ def main():
             avg = sub.mean()
             med = sub.median()
             std = sub.std()
-            print(f"{label:<18} | {avg:10.2f}% | {med:10.2f}% | {std:18.2f}%")
+            print(f"{label:<18} | {avg:10.2f}% | {med:10.2f}% | {std:14.2f}%")
         else:
-            print(f"{label:<18} | Not enough data")
-    print("\n")
+            print(f"{label:<18} | Ekki næg gögn")
+
+    print("\nAthugið: Staðalfrávik byggist á dreifingu mánaðarlegra % breytinga í VNV, ekki í vísitölunni sjálfri.")
 
     future_annual = []
     for i in range(len(df24), len(extended)):
         ann = compute_annual_cpi(extended, i)
         future_annual.append((extended.loc[i, "date"], ann))
 
-    print("Projected annual CPI for next 6 months:")
+    print("\nSpáð árleg verðbólga næstu 6 mánuði:")
     for i in range(len(df24), len(extended)):
         dropped_index = i - 12
         dropped_date = extended.loc[dropped_index, "date"]
         dropped_pct = extended.loc[dropped_index, "Monthly Change"]
         ann = compute_annual_cpi(extended, i)
         prediction_date = extended.loc[i, "date"]
-        print(f"{prediction_date.strftime('%Y-%m')}: {ann:.2f}% "
-              f"(Dropped {dropped_date.strftime('%Y-%m')} Monthly %: {dropped_pct:.2f}%)")
+        print(f"{prediction_date.strftime('%Y-%m')}: {ann:.2f}% (Fellur út: {dropped_date.strftime('%Y-%m')} mánaðarverðbólga: {dropped_pct:.2f}%)")
 
-    # Compute monthly change stats
-    now = pd.Timestamp.now()
-    thresholds = {
-        "Last 24 months": df["date"] > (now - pd.DateOffset(months=24)),
-        "Since 2010": df["date"] >= pd.Timestamp("2010-01-01"),
-        "Since 2000": df["date"] >= pd.Timestamp("2000-01-01"),
-        "All time": df["Monthly Change"].notna()
-    }
-
-    print("\nAverage and Median Monthly Inflation Change:")
-    for label, condition in thresholds.items():
-        sub = df.loc[condition, "Monthly Change"].dropna()
-        if not sub.empty:
-            avg = sub.mean()
-            med = sub.median()
-            print(f"{label:<18} | Avg: {avg:.2f}% | Median: {med:.2f}%")
-        else:
-            print(f"{label:<18} | Not enough data")
-
-    # Compute year-over-year CPI change
-    df["Annual CPI Change"] = df["CPI"].pct_change(periods=12) * 100
-    annual_cpi_changes = df["Annual CPI Change"].dropna()
+    # Árleg breyting á vísitölu
+    df["Árleg VNV Breyting"] = df["CPI"].pct_change(periods=12) * 100
+    annual_cpi_changes = df["Árleg VNV Breyting"].dropna()
 
     avg_annual = annual_cpi_changes.mean()
     med_annual = annual_cpi_changes.median()
+    std_annual = annual_cpi_changes.std()
 
-    print(f"\nAverage Annual CPI Inflation (from start): {avg_annual:.2f}%")
-    print(f"Median Annual CPI Inflation (from start): {med_annual:.2f}%")
+    print("\nÁrleg verðbólga (miðað við % breytingu frá sama mánuði ári áður):")
+    print(f"Meðaltal: {avg_annual:.2f}% | Miðgildi: {med_annual:.2f}% | Staðalfrávik: {std_annual:.2f}%")
 
 if __name__ == "__main__":
     main()
