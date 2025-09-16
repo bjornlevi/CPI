@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="is">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ site_name }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="wrap">
+        <h1 class="brand">{{ site_name }}</h1>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <!-- CPI -->
+      <section class="card mb">
+        <div class="card-body">
+          <div class="rowhead">
+            <h2>VNV (CPI)</h2>
+            <small class="muted">Síðast uppfært: {{ updated }}</small>
+          </div>
+          <canvas id="cpiChart" height="120"></canvas>
+        </div>
+      </section>
+
+      <!-- Wages -->
+      <section class="card">
+        <div class="card-body">
+            <div class="rowhead">
+            <h2>Launavísitala – {{ wage_category or 'Allur vinnumarkaður' }}</h2>
+            {% if wage_categories %}
+                <small class="muted">
+                Skoða:
+                {% for c in wage_categories %}
+                    {% if c == wage_category %}
+                    <strong>{{ c }}</strong>
+                    {% else %}
+                    <a class="link-underline link-underline-opacity-0" href="{{ url_for('index', cat=c) }}">{{ c }}</a>
+                    {% endif %}{% if not loop.last %} · {% endif %}
+                {% endfor %}
+                </small>
+            {% endif %}
+            </div>
+          <canvas id="wageChart" height="120"></canvas>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <small class="muted">© {{ site_name }}</small>
+      </div>
+    </footer>
+
+    <!-- CPI -->
+    <script>
+    (function () {
+    const L  = {{ labels|tojson }};
+    const V  = {{ values|tojson }};
+    const FL = {{ fut_labels|tojson }};
+    const FV = {{ fut_values|tojson }};
+    if (!L.length && !FL.length) return;
+
+    const fmt = v => v.toLocaleString('is-IS', { maximumFractionDigits: 2 });
+
+    // Combined arrays so we can compute deltas across the actual→forecast boundary
+    const labelsAll = L.concat(FL);
+    const valuesAll = V.concat(FV);
+
+    // Custom plugin: draw vertical lines at hovered month and 12 months earlier
+    const twelveMonthMarker = {
+        id: 'twelveMonthMarker',
+        afterDraw(chart) {
+        const tooltip = chart.tooltip;
+        if (!tooltip?.getActiveElements().length) return;
+
+        const i = tooltip.getActiveElements()[0].index;
+        const j = i - 12;
+        if (j < 0) return;
+
+        const xScale = chart.scales.x;
+        const yTop   = chart.chartArea.top;
+        const yBot   = chart.chartArea.bottom;
+        const xCurr  = xScale.getPixelForValue(i);
+        const xPrev  = xScale.getPixelForValue(j);
+
+        const ctx = chart.ctx;
+        ctx.save();
+        // dashed line for 12m-ago
+        ctx.setLineDash([5,4]);
+        ctx.strokeStyle = 'rgba(255,255,255,.35)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(xPrev, yTop); ctx.lineTo(xPrev, yBot); ctx.stroke();
+        // solid line for current
+        ctx.setLineDash([]);
+        ctx.strokeStyle = 'rgba(255,255,255,.6)';
+        ctx.beginPath(); ctx.moveTo(xCurr, yTop); ctx.lineTo(xCurr, yBot); ctx.stroke();
+        ctx.restore();
+        }
+    };
+
+    new Chart(document.getElementById('cpiChart').getContext('2d'), {
+        type: 'line',
+        data: {
+        labels: labelsAll,
+        datasets: [
+            {
+            label: 'VNV vísitala',
+            data: V.concat(Array(FV.length).fill(null)),
+            borderWidth: 2,
+            tension: .2,
+            pointRadius: 3, pointHoverRadius: 5, pointHitRadius: 8
+            },
+            {
+            label: 'Spáð þróun',
+            data: Array(V.length).fill(null).concat(FV),
+            borderDash: [6,4],
+            borderWidth: 2,
+            tension: .2,
+            pointRadius: 3, pointHoverRadius: 5, pointHitRadius: 8,
+            pointBackgroundColor: 'transparent', pointBorderWidth: 2
+            }
+        ]
+        },
+        options: {
+        responsive: true,
+        interaction: { mode: 'nearest', intersect: false },
+        plugins: {
+            legend: { position: 'bottom' },
+            tooltip: {
+            callbacks: {
+                title: items => items[0].label, // YYYY-MM
+                label: ctx => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`,
+                afterLabel: ctx => {
+                const i = ctx.dataIndex;
+                const prev = i > 0 ? valuesAll[i-1] : null;
+                const curr = valuesAll[i];
+                let lines = [];
+                if (prev != null && curr != null) {
+                    const mom = ((curr - prev) / prev) * 100;
+                    lines.push(`Mánaðarbreyting: ${mom.toFixed(2)}%`);
+                }
+                const j = i - 12;
+                if (j >= 0 && valuesAll[j] != null && curr != null) {
+                    const yoy = ((curr - valuesAll[j]) / valuesAll[j]) * 100;
+                    lines.push(`Ársbreyting: ${yoy.toFixed(2)}% (vs ${labelsAll[j]})`);
+                }
+                return lines.join('\n');
+                }
+            }
+            }
+        },
+        scales: {
+            x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
+            y: { beginAtZero: false, ticks: { callback: v => fmt(v) } }
+        }
+        },
+        plugins: [twelveMonthMarker]
+    });
+    })();
+    </script>
+
+    <!-- Wages -->
+    <script>
+    (function () {
+    const L  = {{ wages_labels|tojson }};
+    const V  = {{ wages_values|tojson }};
+    const FL = {{ wages_fut_labels|tojson }};
+    const FV = {{ wages_fut_values|tojson }};
+    if (!L.length && !FL.length) return;
+
+    const fmt = v => v.toLocaleString('is-IS', { maximumFractionDigits: 2 });
+    const labelsAll = L.concat(FL);
+    const valuesAll = V.concat(FV);
+
+    const twelveMonthMarker = {
+        id: 'twelveMonthMarker',
+        afterDraw(chart) {
+        const tooltip = chart.tooltip;
+        if (!tooltip?.getActiveElements().length) return;
+
+        const i = tooltip.getActiveElements()[0].index;
+        const j = i - 12;
+        if (j < 0) return;
+
+        const xScale = chart.scales.x;
+        const yTop   = chart.chartArea.top;
+        const yBot   = chart.chartArea.bottom;
+        const xCurr  = xScale.getPixelForValue(i);
+        const xPrev  = xScale.getPixelForValue(j);
+
+        const ctx = chart.ctx;
+        ctx.save();
+        ctx.setLineDash([5,4]);
+        ctx.strokeStyle = 'rgba(255,255,255,.35)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(xPrev, yTop); ctx.lineTo(xPrev, yBot); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.strokeStyle = 'rgba(255,255,255,.6)';
+        ctx.beginPath(); ctx.moveTo(xCurr, yTop); ctx.lineTo(xCurr, yBot); ctx.stroke();
+        ctx.restore();
+        }
+    };
+
+    new Chart(document.getElementById('wageChart').getContext('2d'), {
+        type: 'line',
+        data: {
+        labels: labelsAll,
+        datasets: [
+            {
+            label: 'Launavísitala (þróun)',
+            data: V.concat(Array(FV.length).fill(null)),
+            borderWidth: 2,
+            tension: .25,
+            pointRadius: 3, pointHoverRadius: 5, pointHitRadius: 8
+            },
+            {
+            label: 'Launavísitala (spá)',
+            data: Array(V.length).fill(null).concat(FV),
+            borderDash: [6,4],
+            borderWidth: 2,
+            tension: .25,
+            pointRadius: 3, pointHoverRadius: 5, pointHitRadius: 8,
+            pointBackgroundColor: 'transparent', pointBorderWidth: 2
+            }
+        ]
+        },
+        options: {
+        responsive: true,
+        interaction: { mode: 'nearest', intersect: false },
+        plugins: {
+            legend: { position: 'bottom' },
+            tooltip: {
+            callbacks: {
+                title: items => items[0].label,
+                label: ctx => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`,
+                afterLabel: ctx => {
+                const i = ctx.dataIndex;
+                const prev = i > 0 ? valuesAll[i-1] : null;
+                const curr = valuesAll[i];
+                let lines = [];
+                if (prev != null && curr != null) {
+                    const mom = ((curr - prev) / prev) * 100;
+                    lines.push(`Mánaðarbreyting: ${mom.toFixed(2)}%`);
+                }
+                const j = i - 12;
+                if (j >= 0 && valuesAll[j] != null && curr != null) {
+                    const yoy = ((curr - valuesAll[j]) / valuesAll[j]) * 100;
+                    lines.push(`Ársbreyting: ${yoy.toFixed(2)}% (vs ${labelsAll[j]})`);
+                }
+                return lines.join('\n');
+                }
+            }
+            }
+        },
+        scales: {
+            x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
+            y: { beginAtZero: false, ticks: { callback: v => fmt(v) } }
+        }
+        },
+        plugins: [twelveMonthMarker]
+    });
+    })();
+    </script>
+
+  </body>
+</html>

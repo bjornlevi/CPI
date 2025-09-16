@@ -1,0 +1,15 @@
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; background:#0b0d10; color:#e7edf3; }
+.wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+.topbar { backdrop-filter: blur(6px); background: rgba(255,255,255,.04); border-bottom: 1px solid rgba(255,255,255,.08); }
+.brand { margin: 0; padding: 14px 0; font-size: 18px; }
+.card { background:#12161a; border:1px solid rgba(255,255,255,.08); border-radius: 14px; }
+.card + .card { margin-top: 18px; }
+.card-body { padding: 16px; }
+.rowhead { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:10px; }
+.muted { color:#9fb0c2; }
+.mb { margin-bottom: 18px; }
+canvas { background:#0f1317; border-radius: 10px; padding: 6px; }
+.footer { border-top:1px solid rgba(255,255,255,.08); margin-top: 24px; }
+.footer .wrap { padding: 14px 0; }
