@@ -7,9 +7,11 @@ from .models import (
     CPIActual, ForecastRun, ForecastPoint,
     WageActual, WageForecastRun, WageForecastPoint,
 )
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 def create_app():
     app = Flask(__name__)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)   
     app.config["SITE_NAME"] = os.environ.get("SITE_NAME", "Efnahagur")
 
     @app.get("/health")
