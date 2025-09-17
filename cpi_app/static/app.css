@@ -13,3 +13,9 @@ body { margin: 0; font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "He
 canvas { background:#0f1317; border-radius: 10px; padding: 6px; }
 .footer { border-top:1px solid rgba(255,255,255,.08); margin-top: 24px; }
 .footer .wrap { padding: 14px 0; }
+.stat-card { margin-top: .75rem; background: #12161a; border: 1px solid rgba(255,255,255,.08); border-radius: .5rem; }
+.stat-card__title { padding: .5rem .75rem; border-bottom: 1px solid rgba(255,255,255,.06); color: #a9b3bc; font-size: .9rem; }
+.stats { width: 100%; border-collapse: collapse; }
+.stats th, .stats td { padding: .5rem .75rem; text-align: left; font-size: .9rem; }
+.stats thead th { color: #bfc8d2; font-weight: 600; }
+.stats tbody tr:nth-child(even) td { background: rgba(255,255,255,.02); }

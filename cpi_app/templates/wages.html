@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="is">
+<head>
+  <meta charset="utf-8">
+  <title>Launavísitala – {{ site_name }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<header class="topbar"><div class="wrap"><h1 class="brand">Launavísitala</h1></div></header>
+
+<main class="wrap">
+  <section class="card">
+    <div class="card-body">
+      <div class="rowhead">
+        <h2>{{ wage_category }}</h2>
+        <small class="muted">Síðast uppfært: {{ wages_updated }}</small>
+      </div>
+
+      <p class="muted small">
+        Skoða:
+        {% for c in wage_categories %}
+          {% if not loop.first %} · {% endif %}
+          <a href="{{ url_for('wages_page', cat=c) }}" class="{{ 'active' if c==wage_category else '' }}">{{ c }}</a>
+        {% endfor %}
+      </p>
+
+      <canvas id="wageChart" height="140"></canvas>
+        <div class="stat-card">
+        <div class="stat-card__title">Samantekt – Launavísitala ({{ wage_category }})</div>
+        <table class="stats">
+            <thead>
+            <tr>
+                <th>Breyt­ing</th>
+                <th>Meðaltal (saga)</th>
+                <th>Miðgildi (saga)</th>
+                <th>Núverandi</th>
+                <th>Spá (næstu {{ wage_table.monthly.horizon }})</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td>Mánaðar</td>
+                <td>{{ wage_table.monthly.historic_avg  is not none and ('%.2f'|format(wage_table.monthly.historic_avg))  ~ '%' or '—' }}</td>
+                <td>{{ wage_table.monthly.historic_med  is not none and ('%.2f'|format(wage_table.monthly.historic_med))  ~ '%' or '—' }}</td>
+                <td>{{ wage_table.monthly.current       is not none and ('%.2f'|format(wage_table.monthly.current))       ~ '%' or '—' }}</td>
+                <td>
+                {{ wage_table.monthly.projected_avg is not none and ('%.2f'|format(wage_table.monthly.projected_avg)) ~ '%' or '—' }}
+                <small class="muted">/ miðg. {{ wage_table.monthly.projected_med is not none and ('%.2f'|format(wage_table.monthly.projected_med)) ~ '%' or '—' }}</small>
+                </td>
+            </tr>
+            <tr>
+                <td>Árleg</td>
+                <td>{{ wage_table.yearly.historic_avg  is not none and ('%.2f'|format(wage_table.yearly.historic_avg))  ~ '%' or '—' }}</td>
+                <td>{{ wage_table.yearly.historic_med  is not none and ('%.2f'|format(wage_table.yearly.historic_med))  ~ '%' or '—' }}</td>
+                <td>{{ wage_table.yearly.current       is not none and ('%.2f'|format(wage_table.yearly.current))       ~ '%' or '—' }}</td>
+                <td>{{ wage_table.yearly.projected     is not none and ('%.2f'|format(wage_table.yearly.projected))     ~ '%' or '—' }}</td>
+            </tr>
+            </tbody>
+        </table>
+
+        {% if real_wage_yoy is not none %}
+            <p class="muted small">Raunlaun, ársbreyting ({{ wage_category }}): <strong>{{ '%.2f'|format(real_wage_yoy) }}%</strong></p>
+        {% endif %}
+        {% if wage_category != 'TOTAL' and wage_gap_vs_total is not none %}
+            <p class="muted small">Mismunur á ársbreytingu m.v. TOTAL: <strong>{{ '%.2f'|format(wage_gap_vs_total) }}%</strong>
+            {% if wage_identical_to_total %} · <em>Ath:</em> röðin virðist eins og TOTAL{% endif %}
+            </p>
+        {% endif %}
+        </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer"><div class="wrap"><small class="muted"><a href="{{ url_for('index') }}">← Til baka</a></small></div></footer>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}?v=7"></script>
+
+<script>
+  EconCharts.initWageChart('wageChart', {
+    labels: {{ wages_labels|tojson }},
+    values: {{ wages_values|tojson }},
+    futLabels: {{ wages_fut_labels|tojson }},
+    futValues: {{ wages_fut_values|tojson }}
+  });
+</script>
+
+</body>
+</html>
