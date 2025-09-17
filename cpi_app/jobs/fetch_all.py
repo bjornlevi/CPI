@@ -4,10 +4,12 @@
 import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 import pandas as pd
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from dateutil.relativedelta import relativedelta
+from ..models import CPISubMetric
 
 from ..models import (
     SessionLocal, Base, engine,
@@ -18,7 +20,8 @@ from ..models import (
 from ..pipelines.cpi import (
     fetch_cpi_data,            # returns CPI source object (Hagstofan-backed)
     parse_data as parse_cpi,   # -> DataFrame: ['date', 'CPI', 'Monthly Change']
-    compute_trend as cpi_trend # -> (model, [(date, yhat), ...])
+    compute_trend as cpi_trend, # -> (model, [(date, yhat), ...])
+    list_isnr, isnr_label, get_isnr_series    
 )
 
 from ..pipelines.wages import (
@@ -27,6 +30,18 @@ from ..pipelines.wages import (
 )
 
 # ---------- CPI helpers ----------
+
+# Curated ISNR codes to always surface
+CPI_CURATED = [
+    "IS011",      # Matur
+    "IS041",      # Greidd húsaleiga
+    "IS042",      # Reiknuð húsaleiga
+    "IS0451",     # Rafmagn
+    "IS0455",     # Hiti
+    "IS06",       # Heilsa
+    "IS0722",     # Bensín og olíur
+    "IS111",      # Veitingar
+]
 
 def upsert_cpi(s: Session, df: pd.DataFrame) -> None:
     for _, r in df.iterrows():
@@ -48,6 +63,75 @@ def save_cpi_forecast(s: Session, df24: pd.DataFrame, months: int = 6) -> None:
     futures = cpi_trend(df24, months_predict=months)[1]
     for d, yhat in futures:
         s.add(ForecastPoint(run_id=run.id, date=d.date(), predicted_cpi=float(yhat)))
+
+def _pct(curr, prev):
+    if curr is None or prev in (None, 0):
+        return None
+    return (curr / prev - 1.0) * 100.0
+
+def _yyyymm(dt):
+    return dt.strftime("%Y-%m")
+
+def upsert_latest_cpi_sub_metrics(session):
+    """
+    For the latest CPI month in CPIActual, compute MoM/YoY and deltas vs total CPI
+    for all top-level IS codes (IS01.., IS02..) and curated fine-grained codes.
+    Upsert into cpi_sub_metrics (one row per code for that month).
+    """
+    # 1) What is the latest month we have in CPIActual?
+    from ..models import CPIActual
+    latest = session.query(CPIActual).order_by(CPIActual.date.desc()).first()
+    if not latest:
+        return
+    last_dt = latest.date
+    prev_dt = last_dt - relativedelta(months=1)
+    prev12_dt = last_dt - relativedelta(months=12)
+
+    # Build quick dict of total CPI values by YYYY-MM for MoM/YoY deltas
+    all_actuals = session.query(CPIActual).order_by(CPIActual.date).all()
+    total_by_key = {_yyyymm(a.date): a.cpi for a in all_actuals}
+
+    last_key, prev_key, prev12_key = _yyyymm(last_dt), _yyyymm(prev_dt), _yyyymm(prev12_dt)
+    total_mom = _pct(total_by_key.get(last_key), total_by_key.get(prev_key))
+    total_yoy = _pct(total_by_key.get(last_key), total_by_key.get(prev12_key))
+
+    # 2) Pull Hagstofan CPI source once
+    src = fetch_cpi_data()
+    all_codes = list_isnr(src)
+
+    # pick: top-level "ISxx" (len==4, not IS00) + your curated set
+    top_level = sorted([c for c in all_codes if c.startswith("IS") and len(c) == 4 and c != "IS00"])
+    target_codes = sorted(set(top_level).union(CPI_CURATED))
+
+    # 3) For each code, get its series, compute value/MoM/YoY for latest month, upsert
+    for code in target_codes:
+        df = get_isnr_series(src, code)  # columns: date, value, Monthly Change (maybe)
+        by_key = {_yyyymm(d): float(v) for d, v in zip(df["date"], df["value"])}
+
+        val = by_key.get(last_key)
+        mom = _pct(by_key.get(last_key), by_key.get(prev_key))
+        yoy = _pct(by_key.get(last_key), by_key.get(prev12_key))
+
+        delta_mom = None if (mom is None or total_mom is None) else (mom - total_mom)
+        delta_yoy = None if (yoy is None or total_yoy is None) else (yoy - total_yoy)
+
+        label = isnr_label(code) or code
+
+        # UPSERT row (date+code unique)
+        obj = session.query(CPISubMetric).filter_by(date=last_dt, code=code).one_or_none()
+        if obj:
+            obj.label = label
+            obj.value = val
+            obj.mom = mom
+            obj.yoy = yoy
+            obj.delta_mom_vs_total = delta_mom
+            obj.delta_yoy_vs_total = delta_yoy
+        else:
+            session.add(CPISubMetric(
+                date=last_dt, code=code, label=label,
+                value=val, mom=mom, yoy=yoy,
+                delta_mom_vs_total=delta_mom, delta_yoy_vs_total=delta_yoy
+            ))
 
 # ---------- Wages helpers (TOTAL) ----------
 
@@ -115,6 +199,9 @@ def main():
         upsert_wages(s, w_df)
         save_wage_forecast(s, w_df, months=12)
 
+        # --- Sub-CPI metrics for latest month (fast) ---
+        upsert_latest_cpi_sub_metrics(s)
+        
         s.commit()
         print("✅ Stored CPI + wages (TOTAL) + forecasts")
 

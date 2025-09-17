@@ -33,6 +33,25 @@ class ForecastPoint(Base):
     date = Column(Date, nullable=False)
     predicted_cpi = Column(Float, nullable=False)
 
+class CPISubMetric(Base):
+    __tablename__ = "cpi_sub_metrics"
+    id = Column(Integer, primary_key=True)
+    date = Column(Date, index=True, nullable=False)          # month (e.g. 2025-08-01)
+    code = Column(String(16), index=True, nullable=False)    # IS011, IS041, ...
+    label = Column(String(128), nullable=False)
+
+    value = Column(Float)             # index level for that month
+    mom = Column(Float)               # % vs previous month (same code)
+    yoy = Column(Float)               # % vs same month a year earlier (same code)
+
+    delta_mom_vs_total = Column(Float)  # mom - total_cpi_mom
+    delta_yoy_vs_total = Column(Float)  # yoy - total_cpi_yoy
+
+    __table_args__ = (
+        UniqueConstraint("date", "code", name="uq_cpi_sub_metric_date_code"),
+    )
+
+
 # --- Wages ---
 class WageActual(Base):
     __tablename__ = "wage_actuals"

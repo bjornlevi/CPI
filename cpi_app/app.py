@@ -1,7 +1,7 @@
 import os
 from flask import Flask, render_template, request
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func
+from sqlalchemy import select, func, desc
 from werkzeug.middleware.proxy_fix import ProxyFix
 from typing import List
 from statistics import mean, median, stdev
@@ -10,6 +10,7 @@ from .models import (
     engine,
     CPIActual, ForecastRun, ForecastPoint,
     WageActual, WageForecastRun, WageForecastPoint,
+    CPISubMetric
 )
 
 # CPI helpers (from your pipelines)
@@ -21,6 +22,11 @@ from .pipelines.cpi import (
 )
 
 FORECAST_MONTHS = 6   # UI cap; also set months=6 in your jobs/backfills
+
+CURATED_ISNR = os.environ.get("CPI_CURATED_CODES",
+    "IS011,IS041,IS042,IS0451,IS0455,IS06,IS0722,IS111"
+).split(",")
+CURATED_ISNR = [c.strip() for c in CURATED_ISNR if c.strip()]
 
 
 def _cpi_context():
@@ -53,18 +59,55 @@ def _cpi_context():
     updated = cpi_actuals[-1].date.strftime("%Y-%m") if cpi_actuals else "N/A"
     cpi_table = _structured_change_table(values, fut_values, len(labels), len(fut_labels))
 
-    # Subcategories (IS01.. top-level; skip IS00)
+    # ---------- Sub-CPI overlays ----------
+
+    # 1) Curated set (always include)
     cpi_src = fetch_cpi_data()
-    all_codes = list_isnr(cpi_src)
-    main_codes = sorted([c for c in all_codes if c.startswith("IS") and len(c) == 4 and c != "IS00"])
-
-    def aligned_series(code: str):
-        df = get_isnr_series(cpi_src, code)  # date,value
+    def series_for(code: str):
+        df = get_isnr_series(cpi_src, code)
         m = {d.strftime("%Y-%m"): float(v) for d, v in zip(df["date"], df["value"])}
-        return [m.get(lbl) for lbl in labels]  # align to labels only (no sub-forecast)
+        return [m.get(lbl) for lbl in labels]
 
-    cpi_sub_meta = [{"code": c, "label": isnr_label(c) or c} for c in main_codes]
-    cpi_sub_series = {c: aligned_series(c) for c in main_codes}
+    curated_meta = [{"code": c, "label": isnr_label(c) or c} for c in CURATED_ISNR]
+    curated_series = {c: series_for(c) for c in CURATED_ISNR}
+
+    # 2) Top movers from DB (latest month), by |delta_yoy_vs_total| (fall back to |delta_mom_vs_total|)
+    with Session(engine) as s2:
+        latest_date = s2.scalar(select(func.max(CPISubMetric.date)))
+        top_meta, top_series = [], {}
+        if latest_date:
+            rows = s2.execute(
+                select(CPISubMetric)
+                .where(CPISubMetric.date == latest_date)
+            ).scalars().all()
+
+            # rank by YoY deviation, fallback to MoM deviation if YoY missing
+            scored = []
+            for r in rows:
+                if r.code in CURATED_ISNR:
+                    continue
+                score = abs(r.delta_yoy_vs_total) if r.delta_yoy_vs_total is not None else (
+                        abs(r.delta_mom_vs_total) if r.delta_mom_vs_total is not None else None)
+                if score is not None:
+                    scored.append((score, r))
+            scored.sort(key=lambda t: t[0], reverse=True)
+            picked = [r for _, r in scored[:6]]  # top 6 movers
+
+            top_meta = [{"code": r.code, "label": r.label} for r in picked]
+            for r in picked:
+                top_series[r.code] = series_for(r.code)
+
+    # combine curated + top movers (dedupe by code)
+    seen = set()
+    cpi_sub_meta = []
+    cpi_sub_series = {}
+    for meta_list, series_map in ((curated_meta, curated_series), (top_meta, top_series)):
+        for m in meta_list:
+            if m["code"] in seen:
+                continue
+            seen.add(m["code"])
+            cpi_sub_meta.append(m)
+            cpi_sub_series[m["code"]] = series_map[m["code"]]
 
     return dict(
         labels=labels, values=values,
@@ -144,7 +187,6 @@ def _wages_context(requested_cat: str | None):
                 gap_vs_total = sel_yoy - tot_yoy
 
     # Real wage YoY = wage YoY - CPI YoY (using CPI totals)
-    from sqlalchemy import desc
     with Session(engine) as s3:
         cpi_all = s3.scalars(select(CPIActual).order_by(CPIActual.date)).all()
         cpi_vals = [a.cpi for a in cpi_all]

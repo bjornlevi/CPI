@@ -17,6 +17,16 @@
       <canvas id="cpiChart" height="140"></canvas>
         <div class="stat-card">
         <div class="stat-card__title">Samantekt – VNV</div>
+        {% if cpi_sub_meta|length > CURATED_ISNR|length %}
+        <p class="muted small" style="margin-top:.5rem">
+            <strong>Undirliðir sem hreyfðust mest nýlega:</strong>
+            {# items after the curated block are movers #}
+            {% for m in cpi_sub_meta[CURATED_ISNR|length:] %}
+            {% if not loop.first %} · {% endif %}
+            {{ m.label }}
+            {% endfor %}
+        </p>
+        {% endif %}
         <table class="stats">
             <thead>
             <tr>
