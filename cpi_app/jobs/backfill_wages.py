@@ -1,128 +1,121 @@
-# jobs/backfill_wages.py — create historical Wage forecast runs (per month, all categories)
-# Usage examples:
-#   python -m jobs.backfill_wages --months-predict 12 --window 24
-#   python -m jobs.backfill_wages --start 2005-01 --end 2025-08 --overwrite
-import os, sys, argparse
-from datetime import datetime, timezone
+# cpi_app/jobs/backfill_wages.py
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, date
+from typing import Iterator, List
+
 import pandas as pd
-from sqlalchemy import select, func
 from sqlalchemy.orm import Session
+from sqlalchemy import select, delete
 
-# allow "from models import ..." when run as a module or script
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
-from models import (
-    engine, Base,
-    WageActual, WageForecastRun, WageForecastPoint
+from ..models import (
+    Base, engine, SessionLocal,
+    WageActual, WageForecastRun, WageForecastPoint,
 )
-from pipelines.wages import compute_forecast as wages_forecast
+from ..pipelines.wages import fetch_wage_series, compute_forecast
 
-def log(*a): print(*a, flush=True)
+def parse_ym(s: str) -> date:
+    return datetime.strptime(s, "%Y-%m").date()
 
-def daterange_months(start: pd.Timestamp, end: pd.Timestamp):
-    m = start.to_period("M"); e = end.to_period("M")
-    while m <= e:
-        yield m.to_timestamp("M")
+def month_iter(start: date, end: date) -> Iterator[date]:
+    y, m = start.year, start.month
+    while True:
+        d = date(y, m, 1)
+        if d > end:
+            break
+        yield d
         m += 1
+        if m == 13:
+            m = 1
+            y += 1
 
-def backfill(months_predict=12, window=24, start=None, end=None, overwrite=False, only_cats=None):
-    """
-    months_predict: forecast horizon per historical month
-    window: how many most-recent months to fit on (per category)
-    only_cats: optional list of categories to restrict (e.g., ["TOTAL","ALM"])
-    """
-    Base.metadata.create_all(engine)  # ensure tables exist
+def upsert_wage_actual(s: Session, d: date, category: str, value: float) -> None:
+    obj = s.query(WageActual).filter_by(date=d, category=category).one_or_none()
+    if obj:
+        obj.index_value = float(value)
+    else:
+        s.add(WageActual(date=d, category=category, index_value=float(value)))
 
-    with Session(engine) as s:
-        # Load all wage actuals
-        acts = s.scalars(select(WageActual).order_by(WageActual.category, WageActual.date)).all()
-        if not acts:
-            raise RuntimeError("No Wage actuals found. Run your fetch job first.")
-
-        # Build a tidy frame: date, category, value
-        df = pd.DataFrame({
-            "date": [pd.Timestamp(a.date) for a in acts],
-            "category": [a.category for a in acts],
-            "value": [a.index_value for a in acts],
-        }).sort_values(["category","date"]).reset_index(drop=True)
-
-        # Category filter if requested
-        all_cats = sorted(df["category"].unique().tolist())
-        cats = [c for c in (only_cats or all_cats) if c in all_cats]
-        if not cats:
-            raise RuntimeError("No categories match the available data.")
-
-        # Date range for backfill
-        min_date = df["date"].min()
-        max_date = df["date"].max()
-        start_ts = (pd.Timestamp(start) if start else min_date + pd.DateOffset(months=window-1)).to_period("M").to_timestamp("M")
-        end_ts   = (pd.Timestamp(end)   if end   else max_date).to_period("M").to_timestamp("M")
-
-        log(f"Wage backfill | cats={cats} | range {start_ts.date()} → {end_ts.date()} | window={window} | horizon={months_predict} | overwrite={overwrite}")
-
-        runs_created = 0
-        for i, cut in enumerate(daterange_months(start_ts, end_ts), 1):
-            # Per-month run (one run for all categories)
-            existing = s.scalars(
-                select(WageForecastRun).where(func.strftime("%Y-%m", WageForecastRun.created_at) == cut.strftime("%Y-%m"))
-                .order_by(WageForecastRun.created_at.desc())
-            ).first()
-
-            if existing and not overwrite:
-                log(f"[{i}] {cut.date()} exists → skip")
-                continue
-
-            if existing and overwrite:
-                s.query(WageForecastPoint).filter(WageForecastPoint.run_id == existing.id).delete()
-                run = existing
-                log(f"[{i}] {cut.date()} overwrite → refresh points")
-            else:
-                run = WageForecastRun(
-                    created_at=datetime(cut.year, cut.month, 1, 12, 0, 0, tzinfo=timezone.utc),
-                    months_predict=months_predict,
-                    notes=f"wage-backfill_window{window}"
-                )
-                s.add(run); s.flush()
-                log(f"[{i}] {cut.date()} new run id={run.id}")
-
-            # For each category, fit on data available up to 'cut'
-            for cat in cats:
-                sub = df[(df["category"] == cat) & (df["date"] <= cut)].copy()
-                if len(sub) < max(2, window):
-                    continue
-                if len(sub) > window:
-                    sub = sub.tail(window).reset_index(drop=True)
-
-                # Series indexed by date for compute_forecast
-                ser = sub.set_index("date")["value"]
-
-                # wages_forecast returns list[(date, value)] in our pipeline.
-                # If your version differs, adapt here.
-                pairs = wages_forecast(ser, months=months_predict)
-                for d, yhat in pairs:
-                    s.add(WageForecastPoint(
-                        run_id=run.id,
-                        date=pd.Timestamp(d).date(),
-                        category=cat,
-                        predicted_index=float(yhat)
-                    ))
-
-            runs_created += 1
-
-        s.commit()
-        log(f"✅ Wage backfill complete. Runs created/refreshed: {runs_created}")
-        return runs_created
+def delete_backfill_run(s: Session, anchor_ym: str, category: str) -> None:
+    # runs created here use notes=f"backfill:{category}:{anchor_ym}:..."
+    runs = s.scalars(
+        select(WageForecastRun).where(WageForecastRun.notes.like(f"backfill:{category}:{anchor_ym}:%"))
+    ).all()
+    for r in runs:
+        s.execute(delete(WageForecastPoint).where(WageForecastPoint.run_id == r.id))
+        s.delete(r)
 
 def main():
-    ap = argparse.ArgumentParser(description="Backfill Wage forecast runs month-by-month.")
-    ap.add_argument("--months-predict", type=int, default=12, help="months to forecast each run (default 12)")
-    ap.add_argument("--window", type=int, default=24, help="training window in months (default 24)")
-    ap.add_argument("--start", type=str, help="YYYY-MM (first month to simulate)")
-    ap.add_argument("--end", type=str, help="YYYY-MM (last month to simulate)")
-    ap.add_argument("--overwrite", action="store_true", help="refresh forecasts for months that already have a run")
-    ap.add_argument("--cats", nargs="*", help="Optional list of categories to include (e.g. TOTAL ALM)")
+    ap = argparse.ArgumentParser(description="Backfill wage index actuals + as-of forecasts by month.")
+    ap.add_argument("--start", required=True, help="YYYY-MM (inclusive)")
+    ap.add_argument("--end",   required=True, help="YYYY-MM (inclusive)")
+    ap.add_argument("--categories", default="TOTAL",
+                    help="Comma-separated wage categories (default: TOTAL). Example: TOTAL,ALM,OPI,OPI_R,OPI_L")
+    ap.add_argument("--months", type=int, default=12, help="Forecast horizon (default: 12)")
+    ap.add_argument("--window", type=int, default=24, help="Regression window in months (default: 24)")
+    ap.add_argument("--overwrite", action="store_true", help="Delete any existing backfill run at same anchor/category")
     args = ap.parse_args()
-    backfill(args.months_predict, args.window, args.start, args.end, args.overwrite, args.cats)
+
+    start = parse_ym(args.start)
+    end   = parse_ym(args.end)
+    cats: List[str] = [c.strip() for c in args.categories.split(",") if c.strip()]
+
+    # Ensure tables
+    Base.metadata.create_all(bind=engine)
+
+    with SessionLocal() as s:
+        total_runs = 0
+        for cat in cats:
+            # load full series for this category once
+            series = fetch_wage_series(cat)  # pandas Series indexed by Timestamp
+            if series.empty:
+                print(f"Category {cat}: no data. Skipping.")
+                continue
+            # normalize index to date()
+            series.index = pd.to_datetime(series.index).date
+
+            for anchor in month_iter(start, end):
+                if anchor not in series.index:
+                    # no actual for this month
+                    continue
+
+                # upsert actual
+                upsert_wage_actual(s, anchor, cat, float(series.loc[anchor]))
+
+                # windowed history ≤ anchor
+                hist = series[series.index <= anchor]
+                if len(hist) < 2:
+                    continue
+                if len(hist) > args.window:
+                    hist = hist[-args.window:]
+
+                # overwrite if requested
+                anchor_ym = f"{anchor.year:04d}-{anchor.month:02d}"
+                if args.overwrite:
+                    delete_backfill_run(s, anchor_ym, cat)
+
+                # create run and store forecast
+                run = WageForecastRun(
+                    months_predict=args.months,
+                    notes=f"backfill:{cat}:{anchor_ym}:linear_reg_{args.window}m",
+                )
+                s.add(run); s.flush()
+
+                fut = compute_forecast(hist, months=args.months, window=len(hist))
+                for d, yhat in fut:
+                    s.add(WageForecastPoint(
+                        run_id=run.id,
+                        category=cat,
+                        date=d.date(),
+                        predicted_index=float(yhat),
+                    ))
+
+                s.commit()
+                total_runs += 1
+                print(f"✓ {cat} {anchor_ym}: stored actual + forecast ({args.months}m)")
+
+        print(f"Done. Created {total_runs} wage forecast runs.")
 
 if __name__ == "__main__":
     main()

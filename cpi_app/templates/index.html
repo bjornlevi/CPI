@@ -58,108 +58,157 @@
     <!-- CPI -->
     <script>
     (function () {
-    const L  = {{ labels|tojson }};
-    const V  = {{ values|tojson }};
-    const FL = {{ fut_labels|tojson }};
-    const FV = {{ fut_values|tojson }};
-    if (!L.length && !FL.length) return;
+      const L  = {{ labels|tojson }};
+      const V  = {{ values|tojson }};
+      const FL = {{ fut_labels|tojson }};
+      const FV = {{ fut_values|tojson }};
 
-    const fmt = v => v.toLocaleString('is-IS', { maximumFractionDigits: 2 });
+      // Sub CPI (aligned to L only; no sub-forecasts)
+      const SUB_META   = {{ cpi_sub_meta|tojson }};     // [{code,label}, ...]
+      const SUB_SERIES = {{ cpi_sub_series|tojson }};   // { code: [values aligned to L] }
 
-    // Combined arrays so we can compute deltas across the actual→forecast boundary
-    const labelsAll = L.concat(FL);
-    const valuesAll = V.concat(FV);
+      if (!L.length && !FL.length) return;
 
-    // Custom plugin: draw vertical lines at hovered month and 12 months earlier
-    const twelveMonthMarker = {
+      // X axis must include forecast months too
+      const labelsAll = L.concat(FL);
+
+      // Combined TOTAL series across actual→forecast boundary (for % calcs)
+      const totalCombined = V.concat(FV);
+
+      const fmt = v => v != null
+          ? Number(v).toLocaleString('is-IS', { maximumFractionDigits: 2 })
+          : '—';
+
+      // --- plugin: draw vertical lines for hovered month and 12 months earlier ---
+      const twelveMonthMarker = {
         id: 'twelveMonthMarker',
         afterDraw(chart) {
-        const tooltip = chart.tooltip;
-        if (!tooltip?.getActiveElements().length) return;
+          const t = chart.tooltip;
+          if (!t?.getActiveElements().length) return;
 
-        const i = tooltip.getActiveElements()[0].index;
-        const j = i - 12;
-        if (j < 0) return;
+          const i = t.getActiveElements()[0].index;
+          const j = i - 12;
+          const x = chart.scales.x;
+          const yTop = chart.chartArea.top;
+          const yBot = chart.chartArea.bottom;
 
-        const xScale = chart.scales.x;
-        const yTop   = chart.chartArea.top;
-        const yBot   = chart.chartArea.bottom;
-        const xCurr  = xScale.getPixelForValue(i);
-        const xPrev  = xScale.getPixelForValue(j);
+          const ctx = chart.ctx;
+          ctx.save();
 
-        const ctx = chart.ctx;
-        ctx.save();
-        // dashed line for 12m-ago
-        ctx.setLineDash([5,4]);
-        ctx.strokeStyle = 'rgba(255,255,255,.35)';
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(xPrev, yTop); ctx.lineTo(xPrev, yBot); ctx.stroke();
-        // solid line for current
-        ctx.setLineDash([]);
-        ctx.strokeStyle = 'rgba(255,255,255,.6)';
-        ctx.beginPath(); ctx.moveTo(xCurr, yTop); ctx.lineTo(xCurr, yBot); ctx.stroke();
-        ctx.restore();
+          // 12m ago (dashed) if in range
+          if (j >= 0) {
+            ctx.setLineDash([5,4]);
+            ctx.strokeStyle = 'rgba(255,255,255,.35)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x.getPixelForValue(j), yTop);
+            ctx.lineTo(x.getPixelForValue(j), yBot);
+            ctx.stroke();
+          }
+
+          // current (solid)
+          ctx.setLineDash([]);
+          ctx.strokeStyle = 'rgba(255,255,255,.6)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x.getPixelForValue(i), yTop);
+          ctx.lineTo(x.getPixelForValue(i), yBot);
+          ctx.stroke();
+
+          ctx.restore();
         }
-    };
+      };
 
-    new Chart(document.getElementById('cpiChart').getContext('2d'), {
-        type: 'line',
-        data: {
-        labels: labelsAll,
-        datasets: [
-            {
-            label: 'VNV vísitala',
-            data: V.concat(Array(FV.length).fill(null)),
-            borderWidth: 2,
-            tension: .2,
-            pointRadius: 3, pointHoverRadius: 5, pointHitRadius: 8
-            },
-            {
-            label: 'Spáð þróun',
-            data: Array(V.length).fill(null).concat(FV),
-            borderDash: [6,4],
-            borderWidth: 2,
-            tension: .2,
-            pointRadius: 3, pointHoverRadius: 5, pointHitRadius: 8,
-            pointBackgroundColor: 'transparent', pointBorderWidth: 2
-            }
-        ]
+      // Build datasets
+      const datasets = [
+        {
+          label: 'VNV vísitala',
+          data: V.concat(Array(FL.length).fill(null)),
+          borderWidth: 2,
+          tension: .2,
+          pointRadius: 2,
+          pointHoverRadius: 4
         },
+        {
+          label: 'Spáð þróun',
+          data: Array(V.length).fill(null).concat(FV),
+          borderDash: [6,4],
+          borderWidth: 2,
+          tension: .2,
+          pointRadius: 2,
+          pointHoverRadius: 0
+        }
+      ];
+
+      // Subcategories: pad with nulls for forecast months; hidden by default (toggle via legend)
+      SUB_META.forEach(m => {
+        const arr = (SUB_SERIES[m.code] || []).slice();      // aligned to L
+        const padded = arr.concat(Array(FL.length).fill(null));
+        datasets.push({
+          label: m.label,
+          data: padded,
+          borderWidth: 2,
+          tension: .2,
+          pointRadius: 2,
+          hidden: true
+        });
+      });
+
+      // Helper: get the series to use for % calcs for the hovered dataset
+      function seriesForDataset(dsLabel) {
+        if (dsLabel === 'VNV vísitala' || dsLabel === 'Spáð þróun') {
+          return totalCombined; // across boundary
+        }
+        // find sub by label and build padded array
+        const m = SUB_META.find(x => x.label === dsLabel);
+        if (!m) return null;
+        const arr = SUB_SERIES[m.code] || [];
+        return arr.concat(Array(FL.length).fill(null));
+      }
+
+      new Chart(document.getElementById('cpiChart').getContext('2d'), {
+        type: 'line',
+        data: { labels: labelsAll, datasets },
         options: {
-        responsive: true,
-        interaction: { mode: 'nearest', intersect: false },
-        plugins: {
+          responsive: true,
+          interaction: { mode: 'nearest', intersect: false },
+          plugins: {
             legend: { position: 'bottom' },
             tooltip: {
-            callbacks: {
+              callbacks: {
                 title: items => items[0].label, // YYYY-MM
                 label: ctx => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`,
                 afterLabel: ctx => {
-                const i = ctx.dataIndex;
-                const prev = i > 0 ? valuesAll[i-1] : null;
-                const curr = valuesAll[i];
-                let lines = [];
-                if (prev != null && curr != null) {
+                  const i = ctx.dataIndex;
+                  const series = seriesForDataset(ctx.dataset.label);
+                  if (!series) return;
+
+                  const curr = series[i];
+                  const prev = i > 0 ? series[i-1] : null;
+                  const j = i - 12;
+                  const prev12 = j >= 0 ? series[j] : null;
+
+                  const lines = [];
+                  if (curr != null && prev != null) {
                     const mom = ((curr - prev) / prev) * 100;
                     lines.push(`Mánaðarbreyting: ${mom.toFixed(2)}%`);
-                }
-                const j = i - 12;
-                if (j >= 0 && valuesAll[j] != null && curr != null) {
-                    const yoy = ((curr - valuesAll[j]) / valuesAll[j]) * 100;
+                  }
+                  if (curr != null && prev12 != null) {
+                    const yoy = ((curr - prev12) / prev12) * 100;
                     lines.push(`Ársbreyting: ${yoy.toFixed(2)}% (vs ${labelsAll[j]})`);
+                  }
+                  return lines.join('\n');
                 }
-                return lines.join('\n');
-                }
+              }
             }
-            }
-        },
-        scales: {
+          },
+          scales: {
             x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
             y: { beginAtZero: false, ticks: { callback: v => fmt(v) } }
-        }
+          }
         },
         plugins: [twelveMonthMarker]
-    });
+      });
     })();
     </script>
 
