@@ -17,15 +17,33 @@
       <canvas id="cpiChart" height="140"></canvas>
         <div class="stat-card">
         <div class="stat-card__title">Samantekt – VNV</div>
-        {% if cpi_sub_meta|length > CURATED_ISNR|length %}
-        <p class="muted small" style="margin-top:.5rem">
+        {% if cpi_movers %}
+        <div class="movers">
             <strong>Undirliðir sem hreyfðust mest nýlega:</strong>
-            {# items after the curated block are movers #}
-            {% for m in cpi_sub_meta[CURATED_ISNR|length:] %}
-            {% if not loop.first %} · {% endif %}
-            {{ m.label }}
+            <ul class="movers-list">
+            {% for m in cpi_movers %}
+                <li>
+                <span class="lbl">{{ m.label }}</span>
+                <span class="pct">
+                    Mán:
+                    {% if m.mom is not none %}
+                    <span class="{{ 'pos' if m.mom >= 0 else 'neg' }}">{{ '%.2f'|format(m.mom) }}%</span>
+                    {% else %} — {% endif %}
+                    · Ár:
+                    {% if m.yoy is not none %}
+                    <span class="{{ 'pos' if m.yoy >= 0 else 'neg' }}">{{ '%.2f'|format(m.yoy) }}%</span>
+                    {% else %} — {% endif %}
+                </span>
+                {% if m.d_mom is not none or m.d_yoy is not none %}
+                    <small class="muted">
+                    (ΔM: {% if m.d_mom is not none %}{{ m.d_mom|round(2) }}pp{% else %}—{% endif %}
+                    · ΔÁ: {% if m.d_yoy is not none %}{{ m.d_yoy|round(2) }}pp{% else %}—{% endif %})
+                    </small>
+                {% endif %}
+                </li>
             {% endfor %}
-        </p>
+            </ul>
+        </div>
         {% endif %}
         <table class="stats">
             <thead>

@@ -109,13 +109,46 @@ def _cpi_context():
             cpi_sub_meta.append(m)
             cpi_sub_series[m["code"]] = series_map[m["code"]]
 
+    # ... after you have `rows` and `picked` ...
+    rows_by_code = {r.code: r for r in rows}
+
+    # Curated first (if available this month)
+    curated_data = []
+    for code in CURATED_ISNR:
+        r = rows_by_code.get(code)
+        if not r:
+            continue
+        curated_data.append({
+            "code": code,
+            "label": r.label or code,
+            "mom": r.mom, "yoy": r.yoy,
+            "d_mom": r.delta_mom_vs_total, "d_yoy": r.delta_yoy_vs_total,
+        })
+
+    # Then the top movers you picked (ranked by delta vs total), excluding duplicates
+    top_data = []
+    seen = {d["code"] for d in curated_data}
+    for r in picked:
+        if r.code in seen:
+            continue
+        top_data.append({
+            "code": r.code,
+            "label": r.label or r.code,
+            "mom": r.mom, "yoy": r.yoy,
+            "d_mom": r.delta_mom_vs_total, "d_yoy": r.delta_yoy_vs_total,
+        })
+
+    cpi_movers = curated_data + top_data
+
     return dict(
         labels=labels, values=values,
         fut_labels=fut_labels, fut_values=fut_values,
         updated=updated,
         cpi_sub_meta=cpi_sub_meta, cpi_sub_series=cpi_sub_series,
         cpi_table=cpi_table,
+        cpi_movers=cpi_movers,
     )
+
 
 def _wages_context(requested_cat: str | None):
     """Build context for wages chart for a chosen category with newest forecast."""
