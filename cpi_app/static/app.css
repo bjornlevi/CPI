@@ -27,9 +27,9 @@ a:hover { color: #b6d8ff; text-decoration: underline; }
   border: 1px solid rgba(255,255,255,.08);
   border-radius: 14px;
 }
-.card + .card { margin-top: 18px; }
 .card-body { padding: 16px; }
 
+/* headers/footers inside cards */
 .rowhead, .rowfoot {
   display: flex;
   align-items: baseline;
@@ -42,24 +42,50 @@ a:hover { color: #b6d8ff; text-decoration: underline; }
 .small { font-size: .9rem; }
 .mb { margin-bottom: 18px; }
 
-/* ----- Charts: consistent height everywhere ----- */
-.card.card--chart { display: flex; flex-direction: column; }
-.card.card--chart .card-body { display: flex; flex-direction: column; gap: .75rem; }
+/* ========================
+   GRID LAYOUT FOR CARDS
+   ======================== */
+.cards {
+  display: grid;
+  gap: 1rem;                 /* spacing between cards */
+  grid-template-columns: 1fr;
+  align-items: stretch;      /* each card fills the row height */
+}
+@media (min-width: 1000px) {
+  .cards { grid-template-columns: 1fr 1fr; }
+}
 
-/* Chart container drives the height; canvas just fills it */
+/* IMPORTANT: remove sibling margin that breaks alignment with CSS Grid */
+ /* .card + .card { margin-top: 18px; }  <-- DELETE/COMMENT OUT */
+
+/* Chart cards always fill their grid track */
+.card.card--chart {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* 3-row grid inside the card body: header / chart / footer */
+.card.card--chart .card-body {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: .75rem;
+  min-height: 0;          /* allow middle row to shrink if needed */
+}
+
+/* The chart area: fixed, unified height */
 .chart-box {
   position: relative;
   width: 100%;
   height: var(--chart-h);
   border-radius: .5rem;
   overflow: hidden;
-  background: #0f1317; /* dark chart surface */
+  background: #0f1317;   /* dark chart surface */
 }
 .chart-box--sm { height: 280px; }
-.chart-box--md { height: var(--chart-h); }
 .chart-box--lg { height: 420px; }
 
-/* Canvas takes the container size; no global canvas background */
+/* Canvas fills its container (no extra background/padding on canvas) */
 .chart-box > canvas {
   position: absolute; inset: 0;
   width: 100% !important;
@@ -68,7 +94,7 @@ a:hover { color: #b6d8ff; text-decoration: underline; }
 }
 canvas { background: transparent; padding: 0; display: block; }
 
-/* ----- Stats / tables ----- */
+/* Stats / tables */
 .stat-card {
   margin-top: .75rem;
   background: #12161a;
@@ -81,22 +107,21 @@ canvas { background: transparent; padding: 0; display: block; }
   color: #a9b3bc;
   font-size: .9rem;
 }
-
 .stats { width: 100%; border-collapse: collapse; }
 .stats th, .stats td { padding: .5rem .75rem; text-align: left; font-size: .9rem; }
 .stats thead th { color: #bfc8d2; font-weight: 600; }
 .stats tbody tr:nth-child(even) td { background: rgba(255,255,255,.02); }
 
-/* ----- CPI movers list ----- */
+/* CPI movers list */
 .movers { padding: .5rem .75rem; }
 .movers-list { list-style: none; margin: .25rem 0 0; padding: 0; display: grid; gap: .25rem; }
 .movers-list li { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: baseline; }
 .movers-list .lbl { font-weight: 600; }
 .movers-list .pct { color: #bcd0e3; }
-.pos { color: #7be495; }   /* green up */
-.neg { color: #ff8a8a; }   /* red down */
+.pos { color: #7be495; }
+.neg { color: #ff8a8a; }
 
-/* ----- Category filter links ----- */
+/* Active filter link */
 a.active {
   color: #e7edf3;
   font-weight: 600;
@@ -104,10 +129,11 @@ a.active {
   text-underline-offset: 2px;
 }
 
-/* ----- Footer ----- */
+/* Footer */
 .footer { border-top: 1px solid rgba(255,255,255,.08); margin-top: 24px; }
 .footer .wrap { padding: 14px 0; }
 
-/* ----- Grid (homepage cards in two columns on desktop) ----- */
-.cards { display: grid; gap: 1rem; grid-template-columns: 1fr; }
-@media (min-width: 1000px) { .cards { grid-template-columns: 1fr 1fr; } }
+/* Footer row in chart cards (grid row #3) */
+.rowfoot { display: flex; align-items: center; }
+.btn-link { text-decoration: none; }
+.btn-link:hover { text-decoration: underline; }
