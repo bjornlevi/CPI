@@ -51,7 +51,6 @@ class CPISubMetric(Base):
         UniqueConstraint("date", "code", name="uq_cpi_sub_metric_date_code"),
     )
 
-
 # --- Wages ---
 class WageActual(Base):
     __tablename__ = "wage_actuals"
@@ -74,4 +73,52 @@ class WageForecastPoint(Base):
     run_id = Column(Integer, ForeignKey("wage_forecast_runs.id"), nullable=False)
     date = Column(Date, nullable=False)
     category = Column(String(16), nullable=False)
+    predicted_index = Column(Float, nullable=False)
+
+# --- Construction Price Index (BCI) ---
+class BCIActual(Base):
+    __tablename__ = "bci_actuals"
+    id = Column(Integer, primary_key=True)
+    date = Column(Date, index=True, nullable=False)
+    category = Column(String(32), index=True, nullable=False, default="BCI")
+    index_value = Column(Float, nullable=False)
+    __table_args__ = (UniqueConstraint("date", "category", name="uq_bci_actual"),)
+
+class BCIForecastRun(Base):
+    __tablename__ = "bci_forecast_runs"
+    id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime)
+    months_predict = Column(Integer, nullable=False)
+    notes = Column(String(200))
+
+class BCIForecastPoint(Base):
+    __tablename__ = "bci_forecast_points"
+    id = Column(Integer, primary_key=True)
+    run_id = Column(Integer, ForeignKey("bci_forecast_runs.id", ondelete="CASCADE"), index=True, nullable=False)
+    date = Column(Date, index=True, nullable=False)
+    category = Column(String(32), index=True, nullable=False, default="BCI")
+    predicted_index = Column(Float, nullable=False)
+
+# --- Production Price Index (PPI) ---
+class PPIActual(Base):
+    __tablename__ = "ppi_actuals"
+    id = Column(Integer, primary_key=True)
+    date = Column(Date, index=True, nullable=False)
+    category = Column(String(32), index=True, nullable=False, default="PPI")
+    index_value = Column(Float, nullable=False)
+    __table_args__ = (UniqueConstraint("date", "category", name="uq_ppi_actual"),)
+
+class PPIForecastRun(Base):
+    __tablename__ = "ppi_forecast_runs"
+    id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime)
+    months_predict = Column(Integer, nullable=False)
+    notes = Column(String(200))
+
+class PPIForecastPoint(Base):
+    __tablename__ = "ppi_forecast_points"
+    id = Column(Integer, primary_key=True)
+    run_id = Column(Integer, ForeignKey("ppi_forecast_runs.id", ondelete="CASCADE"), index=True, nullable=False)
+    date = Column(Date, index=True, nullable=False)
+    category = Column(String(32), index=True, nullable=False, default="PPI")
     predicted_index = Column(Float, nullable=False)

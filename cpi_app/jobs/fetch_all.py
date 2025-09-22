@@ -17,6 +17,15 @@ from ..models import (
     WageActual, WageForecastRun, WageForecastPoint,
 )
 
+from ..models import (
+  # existing…
+  BCIActual, BCIForecastRun, BCIForecastPoint,
+  PPIActual, PPIForecastRun, PPIForecastPoint,
+)
+from ..pipelines.bci import fetch_bci_series as fetch_bci, compute_forecast as bci_forecast
+from ..pipelines.ppi import fetch_ppi_series as fetch_ppi, compute_forecast as ppi_forecast
+
+
 from ..pipelines.cpi import (
     fetch_cpi_data,            # returns CPI source object (Hagstofan-backed)
     parse_data as parse_cpi,   # -> DataFrame: ['date', 'CPI', 'Monthly Change']
@@ -177,6 +186,36 @@ def save_wage_forecast(s: Session, df: pd.DataFrame, months: int = 12) -> None:
                 predicted_index=float(yhat),
             ))
 
+def upsert_bci(s, df):
+    # df: date, category, value
+    for d, cat, val in df.itertuples(index=False):
+        obj = s.query(BCIActual).filter_by(date=d, category=cat).one_or_none()
+        if obj: obj.index_value = float(val)
+        else:   s.add(BCIActual(date=d, category=cat, index_value=float(val)))
+
+def save_bci_forecast(s, df, months=6):
+    run = BCIForecastRun(months_predict=months, notes="linear_reg_24m")
+    s.add(run); s.flush()
+    for cat, sub in df.groupby("category"):
+        ser = sub.set_index("date")["value"]
+        for d, yhat in bci_forecast(ser, months=months):
+            s.add(BCIForecastPoint(run_id=run.id, date=d, category=cat, predicted_index=float(yhat)))
+
+def upsert_ppi(s, df):
+    for d, cat, val in df.itertuples(index=False):
+        obj = s.query(PPIActual).filter_by(date=d, category=cat).one_or_none()
+        if obj: obj.index_value = float(val)
+        else:   s.add(PPIActual(date=d, category=cat, index_value=float(val)))
+
+def save_ppi_forecast(s, df, months=6):
+    run = PPIForecastRun(months_predict=months, notes="linear_reg_24m")
+    s.add(run); s.flush()
+    for cat, sub in df.groupby("category"):
+        ser = sub.set_index("date")["value"]
+        for d, yhat in ppi_forecast(ser, months=months):
+            s.add(PPIForecastPoint(run_id=run.id, date=d, category=cat, predicted_index=float(yhat)))
+
+
 # ---------- main ----------
 
 def main():
@@ -201,9 +240,19 @@ def main():
 
         # --- Sub-CPI metrics for latest month (fast) ---
         upsert_latest_cpi_sub_metrics(s)
-        
+
+        # --- BCI ---
+        bci_df = fetch_bci(categories=["BCI"])  # add more cats later if desired
+        upsert_bci(s, bci_df)
+        save_bci_forecast(s, bci_df, months=6)
+
+        # --- PPI ---
+        ppi_df = fetch_ppi(categories=["PPI"])
+        upsert_ppi(s, ppi_df)
+        save_ppi_forecast(s, ppi_df, months=6)
+
         s.commit()
-        print("✅ Stored CPI + wages (TOTAL) + forecasts")
+        print("✅ Stored CPI + wages (TOTAL) + PPI + BCI + forecasts")
 
     except Exception:
         s.rollback()

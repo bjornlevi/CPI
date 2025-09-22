@@ -1,21 +1,113 @@
-:root { color-scheme: dark; }
+:root { color-scheme: dark; --chart-h: 340px; }
+@media (min-width: 1200px) { :root { --chart-h: 360px; } }
+
 * { box-sizing: border-box; }
-body { margin: 0; font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; background:#0b0d10; color:#e7edf3; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+  background: #0b0d10;
+  color: #e7edf3;
+}
+
+a { color: #8dc1ff; text-decoration: none; }
+a:hover { color: #b6d8ff; text-decoration: underline; }
+
 .wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
-.topbar { backdrop-filter: blur(6px); background: rgba(255,255,255,.04); border-bottom: 1px solid rgba(255,255,255,.08); }
+
+.topbar {
+  backdrop-filter: blur(6px);
+  background: rgba(255,255,255,.04);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
 .brand { margin: 0; padding: 14px 0; font-size: 18px; }
-.card { background:#12161a; border:1px solid rgba(255,255,255,.08); border-radius: 14px; }
+
+.card {
+  background: #12161a;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+}
 .card + .card { margin-top: 18px; }
 .card-body { padding: 16px; }
-.rowhead { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:10px; }
-.muted { color:#9fb0c2; }
+
+.rowhead, .rowfoot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.rowhead h2 { margin: 0; font-size: 1.1rem; }
+.muted { color: #9fb0c2; }
+.small { font-size: .9rem; }
 .mb { margin-bottom: 18px; }
-canvas { background:#0f1317; border-radius: 10px; padding: 6px; }
-.footer { border-top:1px solid rgba(255,255,255,.08); margin-top: 24px; }
-.footer .wrap { padding: 14px 0; }
-.stat-card { margin-top: .75rem; background: #12161a; border: 1px solid rgba(255,255,255,.08); border-radius: .5rem; }
-.stat-card__title { padding: .5rem .75rem; border-bottom: 1px solid rgba(255,255,255,.06); color: #a9b3bc; font-size: .9rem; }
+
+/* ----- Charts: consistent height everywhere ----- */
+.card.card--chart { display: flex; flex-direction: column; }
+.card.card--chart .card-body { display: flex; flex-direction: column; gap: .75rem; }
+
+/* Chart container drives the height; canvas just fills it */
+.chart-box {
+  position: relative;
+  width: 100%;
+  height: var(--chart-h);
+  border-radius: .5rem;
+  overflow: hidden;
+  background: #0f1317; /* dark chart surface */
+}
+.chart-box--sm { height: 280px; }
+.chart-box--md { height: var(--chart-h); }
+.chart-box--lg { height: 420px; }
+
+/* Canvas takes the container size; no global canvas background */
+.chart-box > canvas {
+  position: absolute; inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 10px;
+}
+canvas { background: transparent; padding: 0; display: block; }
+
+/* ----- Stats / tables ----- */
+.stat-card {
+  margin-top: .75rem;
+  background: #12161a;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: .5rem;
+}
+.stat-card__title {
+  padding: .5rem .75rem;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  color: #a9b3bc;
+  font-size: .9rem;
+}
+
 .stats { width: 100%; border-collapse: collapse; }
 .stats th, .stats td { padding: .5rem .75rem; text-align: left; font-size: .9rem; }
 .stats thead th { color: #bfc8d2; font-weight: 600; }
 .stats tbody tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+
+/* ----- CPI movers list ----- */
+.movers { padding: .5rem .75rem; }
+.movers-list { list-style: none; margin: .25rem 0 0; padding: 0; display: grid; gap: .25rem; }
+.movers-list li { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: baseline; }
+.movers-list .lbl { font-weight: 600; }
+.movers-list .pct { color: #bcd0e3; }
+.pos { color: #7be495; }   /* green up */
+.neg { color: #ff8a8a; }   /* red down */
+
+/* ----- Category filter links ----- */
+a.active {
+  color: #e7edf3;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ----- Footer ----- */
+.footer { border-top: 1px solid rgba(255,255,255,.08); margin-top: 24px; }
+.footer .wrap { padding: 14px 0; }
+
+/* ----- Grid (homepage cards in two columns on desktop) ----- */
+.cards { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+@media (min-width: 1000px) { .cards { grid-template-columns: 1fr 1fr; } }

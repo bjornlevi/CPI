@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="is">
+<head>
+  <meta charset="utf-8">
+  <title>Vísitala framleiðsluverðs – {{ site_name }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- bump version to bust cache -->
+  <script src="{{ url_for('static', filename='js/charts.js') }}?v=12"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap"><h1 class="brand">Vísitala framleiðsluverðs</h1></div>
+</header>
+
+<main class="wrap">
+  <section class="card card--chart">
+    <div class="card-body">
+      <div class="rowhead">
+        <h2>{{ ppi_category }}</h2>
+        <small class="muted">Síðast uppfært: {{ ppi_updated }}</small>
+      </div>
+
+      <p class="muted small" style="margin:0">
+        Skoða:
+        {% for c in ppi_categories %}
+          {% if not loop.first %} · {% endif %}
+          <a href="{{ url_for('ppi_page', cat=c) }}" class="{{ 'active' if c==ppi_category else '' }}">{{ c }}</a>
+        {% endfor %}
+      </p>
+
+      <!-- FIX: controlled height container -->
+      <div class="chart-box chart-box--md">
+        <canvas id="ppiChart"></canvas>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="wrap"><small class="muted"><a href="{{ url_for('index') }}">← Til baka</a></small></div>
+</footer>
+
+<script>
+  EconCharts.initLineForecastChart('ppiChart', {
+    labels:    {{ ppi_labels|tojson }},
+    values:    {{ ppi_values|tojson }},
+    futLabels: {{ ppi_fut_labels|tojson }},
+    futValues: {{ ppi_fut_values|tojson }}
+  });
+</script>
+</body>
+</html>

@@ -13,6 +13,13 @@ from .models import (
     CPISubMetric
 )
 
+from .models import (
+    engine,
+    # existing…
+    BCIActual, BCIForecastRun, BCIForecastPoint,
+    PPIActual, PPIForecastRun, PPIForecastPoint,
+)
+
 # CPI helpers (from your pipelines)
 from .pipelines.cpi import (
     fetch_cpi_data,         # fetches Hagstofan CPI source
@@ -240,6 +247,107 @@ def _wages_context(requested_cat: str | None):
         wage_table=wage_table,
     )
 
+def _pick_best_cat(session, model_actual, preferred: str | None):
+    """Return a category that actually has rows. Prefer `preferred` if present,
+    else the category with the most recent data, else the first alphabetically."""
+    cats = session.scalars(
+        select(model_actual.category).distinct().order_by(model_actual.category)
+    ).all() or []
+
+    if preferred and preferred in cats:
+        return preferred, cats
+
+    # category with the latest observation
+    best = session.execute(
+        select(model_actual.category, func.max(model_actual.date).label("m"))
+        .group_by(model_actual.category)
+        .order_by(func.max(model_actual.date).desc())
+        .limit(1)
+    ).first()
+    if best:
+        return best[0], cats
+
+    # fallback
+    return (cats[0] if cats else None), cats
+
+def _bci_context(requested_cat: str | None):
+    with Session(engine) as s:
+        # prefer "BCI" (total); otherwise pick the category with newest data
+        cat, cats = _pick_best_cat(s, BCIActual, preferred="BCI")
+        if requested_cat and requested_cat in cats:
+            cat = requested_cat
+
+        actuals = s.scalars(
+            select(BCIActual).where(BCIActual.category == cat).order_by(BCIActual.date)
+        ).all()
+
+        # Use the forecast run that has the latest point for *this* category (may be none)
+        best_run_id = s.scalar(
+            select(BCIForecastPoint.run_id)
+            .where(BCIForecastPoint.category == cat)
+            .group_by(BCIForecastPoint.run_id)
+            .order_by(func.max(BCIForecastPoint.date).desc())
+            .limit(1)
+        )
+        future = s.scalars(
+            select(BCIForecastPoint)
+            .where(BCIForecastPoint.run_id == best_run_id,
+                   BCIForecastPoint.category == cat)
+            .order_by(BCIForecastPoint.date)
+        ).all() if best_run_id else []
+
+    labels     = [a.date.strftime("%Y-%m") for a in actuals[-24:]]
+    values     = [a.index_value for a in actuals[-24:]]
+    future     = future[:FORECAST_MONTHS]
+    fut_labels = [p.date.strftime("%Y-%m") for p in future]
+    fut_values = [p.predicted_index for p in future]
+    updated    = actuals[-1].date.strftime("%Y-%m") if actuals else "N/A"
+
+    return dict(
+        bci_labels=labels, bci_values=values,
+        bci_fut_labels=fut_labels, bci_fut_values=fut_values,
+        bci_updated=updated,
+        bci_category=cat, bci_categories=cats,
+    )
+
+def _ppi_context(requested_cat: str | None):
+    with Session(engine) as s:
+        cat, cats = _pick_best_cat(s, PPIActual, preferred="PPI")
+        if requested_cat and requested_cat in cats:
+            cat = requested_cat
+
+        actuals = s.scalars(
+            select(PPIActual).where(PPIActual.category == cat).order_by(PPIActual.date)
+        ).all()
+
+        best_run_id = s.scalar(
+            select(PPIForecastPoint.run_id)
+            .where(PPIForecastPoint.category == cat)
+            .group_by(PPIForecastPoint.run_id)
+            .order_by(func.max(PPIForecastPoint.date).desc())
+            .limit(1)
+        )
+        future = s.scalars(
+            select(PPIForecastPoint)
+            .where(PPIForecastPoint.run_id == best_run_id,
+                   PPIForecastPoint.category == cat)
+            .order_by(PPIForecastPoint.date)
+        ).all() if best_run_id else []
+
+    labels     = [a.date.strftime("%Y-%m") for a in actuals[-24:]]
+    values     = [a.index_value for a in actuals[-24:]]
+    future     = future[:FORECAST_MONTHS]
+    fut_labels = [p.date.strftime("%Y-%m") for p in future]
+    fut_values = [p.predicted_index for p in future]
+    updated    = actuals[-1].date.strftime("%Y-%m") if actuals else "N/A"
+
+    return dict(
+        ppi_labels=labels, ppi_values=values,
+        ppi_fut_labels=fut_labels, ppi_fut_values=fut_values,
+        ppi_updated=updated,
+        ppi_category=cat, ppi_categories=cats,
+    )
+
 def _pct_change(curr: float, prev: float) -> float | None:
     if curr is None or prev in (None, 0):
         return None
@@ -373,14 +481,16 @@ def create_app():
     # ---------- Home ----------
     @app.get("/")
     def index():
-        cpi_ctx = _cpi_context()
+        cpi_ctx   = _cpi_context()
         wages_ctx = _wages_context(request.args.get("cat"))
+        bci_ctx   = _bci_context(None)
+        ppi_ctx   = _ppi_context(None)
         return render_template(
             "index.html",
             site_name=app.config["SITE_NAME"],
-            **cpi_ctx,
-            **wages_ctx,
+            **cpi_ctx, **wages_ctx, **bci_ctx, **ppi_ctx
         )
+
 
     # ---------- CPI detail ----------
     @app.get("/cpi")
@@ -402,8 +512,17 @@ def create_app():
             **wages_ctx,
         )
 
-    return app
+    @app.get("/bci")
+    def bci_page():
+        ctx = _bci_context(request.args.get("cat"))
+        return render_template("bci.html", site_name=app.config["SITE_NAME"], **ctx)
 
+    @app.get("/ppi")
+    def ppi_page():
+        ctx = _ppi_context(request.args.get("cat"))
+        return render_template("ppi.html", site_name=app.config["SITE_NAME"], **ctx)
+
+    return app
 
 if __name__ == "__main__":
     create_app().run(debug=True)

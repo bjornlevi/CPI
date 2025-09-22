@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="is">
+<head>
+  <meta charset="utf-8">
+  <title>Byggingarkostnaðarvísitala – {{ site_name }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- bump the version to bust cache so maintainAspectRatio:false is picked up -->
+  <script src="{{ url_for('static', filename='js/charts.js') }}?v=12"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap"><h1 class="brand">Byggingarkostnaðarvísitala</h1></div>
+</header>
+
+<main class="wrap">
+  <section class="card card--chart">
+    <div class="card-body">
+      <div class="rowhead">
+        <h2>{{ bci_category }}</h2>
+        <small class="muted">Síðast uppfært: {{ bci_updated }}</small>
+      </div>
+
+      <!-- FIX: put the canvas inside a fixed-height container -->
+      <div class="chart-box chart-box--md">
+        <canvas id="bciChart"></canvas>
+      </div>
+
+      <div class="rowfoot">
+        <p class="muted small" style="margin:0">
+          Skoða:
+          {% for c in bci_categories %}
+            {% if not loop.first %} · {% endif %}
+            <a href="{{ url_for('bci_page', cat=c) }}" class="{{ 'active' if c==bci_category else '' }}">{{ c }}</a>
+          {% endfor %}
+        </p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="wrap"><small class="muted"><a href="{{ url_for('index') }}">← Til baka</a></small></div>
+</footer>
+
+<script>
+  EconCharts.initLineForecastChart('bciChart', {
+    labels:    {{ bci_labels|tojson }},
+    values:    {{ bci_values|tojson }},
+    futLabels: {{ bci_fut_labels|tojson }},
+    futValues: {{ bci_fut_values|tojson }}
+  });
+</script>
+</body>
+</html>

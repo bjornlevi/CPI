@@ -11,58 +11,130 @@
 <header class="topbar"><div class="wrap"><h1 class="brand">{{ site_name }}</h1></div></header>
 
 <main class="wrap">
-  <!-- CPI card -->
-  <section class="card mb">
-    <div class="card-body">
-      <div class="rowhead">
-        <h2>VNV (CPI)</h2>
-        <small class="muted">Síðast uppfært: {{ updated }}</small>
+  <div class="cards">
+    <section class="card card--chart mb">
+      <div class="card-body">
+        <div class="rowhead">
+          <h2>Vísitala neysluverðs</h2>
+          <small class="muted">Síðast uppfært: {{ updated }}</small>
+        </div>
+        <div class="chart-box">
+          <canvas id="cpiChart"></canvas>
+        </div>
+        <div class="rowfoot">
+          <a class="btn-link" href="{{ url_for('wages_page') }}">Skoða nánar →</a>
+        </div>
       </div>
-      <canvas id="cpiChart" height="120"></canvas>
-      <div class="rowfoot">
-        <a href="{{ url_for('cpi_page') }}" class="btn-link">Skoða nánar →</a>
+    </section>
+    
+    <!-- Wages card -->
+    <section class="card">
+      <div class="card-body">
+        <div class="rowhead">
+          <h2>Launavísitala – {{ wage_category }}</h2>
+          <small class="muted">Síðast uppfært: {{ wages_updated }}</small>
+        </div>
+        <div class="chart-box">
+          <canvas id="wageChart"></canvas>
+        </div>
+        <div class="rowfoot">
+          <a href="{{ url_for('wages_page', cat=wage_category) }}" class="btn-link">Skoða nánar →</a>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Wages card -->
-  <section class="card">
-    <div class="card-body">
-      <div class="rowhead">
-        <h2>Launavísitala – {{ wage_category }}</h2>
-        <small class="muted">Síðast uppfært: {{ wages_updated }}</small>
+    <section class="card card--chart mb">
+      <div class="card-body">
+        <div class="rowhead">
+          <h2>Byggingarkostnaðarvísitala</h2>
+          <small class="muted">Síðast uppfært: {{ bci_updated }}</small>
+        </div>
+
+        <div class="chart-box">
+          <canvas id="bciChart"></canvas>
+        </div>
+
+        <div class="rowfoot">
+          <a class="btn-link" href="{{ url_for('bci_page') }}">Skoða nánar →</a>
+        </div>
       </div>
-      <canvas id="wageChart" height="120"></canvas>
-      <div class="rowfoot">
-        <a href="{{ url_for('wages_page', cat=wage_category) }}" class="btn-link">Skoða nánar →</a>
+    </section>
+
+    <section class="card card--chart mb">
+      <div class="card-body">
+        <div class="rowhead">
+          <h2>Vísitala framleiðsluverðs</h2>
+          <small class="muted">Síðast uppfært: {{ ppi_updated }}</small>
+        </div>
+
+        <div class="chart-box">
+          <canvas id="ppiChart"></canvas>
+        </div>
+
+        <div class="rowfoot">
+          <a class="btn-link" href="{{ url_for('ppi_page') }}">Skoða nánar →</a>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
+  </div>
 </main>
-
 <footer class="footer"><div class="wrap"><small class="muted">© {{ site_name }}</small></div></footer>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="{{ url_for('static', filename='js/charts.js') }}?v=7"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}?v=8"></script>
 
 <script>
+
+  // HOME: show only total CPI + forecast (no subcategory legend)
   EconCharts.initCPIChart('cpiChart', {
-    labels: {{ labels|tojson }},
-    values: {{ values|tojson }},
-    futLabels: {{ fut_labels|tojson }},
-    futValues: {{ fut_values|tojson }},
-    subMeta: {{ cpi_sub_meta|tojson }},
-    subSeries: {{ cpi_sub_series|tojson }}
+    labels:     {{ labels|tojson }},
+    values:     {{ values|tojson }},
+    futLabels:  {{ fut_labels|tojson }},
+    futValues:  {{ fut_values|tojson }}
+    // <-- do NOT include subMeta/subSeries here
   });
-</script>
-<script>
+
   EconCharts.initWageChart('wageChart', {
     labels: {{ wages_labels|tojson }},
     values: {{ wages_values|tojson }},
     futLabels: {{ wages_fut_labels|tojson }},
     futValues: {{ wages_fut_values|tojson }}
   });
+
+  EconCharts.initLineForecastChart('bciChart', {
+    labels:    {{ bci_labels|tojson }},
+    values:    {{ bci_values|tojson }},
+    futLabels: {{ bci_fut_labels|tojson }},
+    futValues: {{ bci_fut_values|tojson }}
+  });
+
+  EconCharts.initLineForecastChart('ppiChart', {
+    labels:    {{ ppi_labels|tojson }},
+    values:    {{ ppi_values|tojson }},
+    futLabels: {{ ppi_fut_labels|tojson }},
+    futValues: {{ ppi_fut_values|tojson }}
+  });
 </script>
+
+<script>
+  // Expose rendered data so you can inspect it in the console
+  window.__BCI = {
+    labels:    {{ bci_labels|tojson }},
+    values:    {{ bci_values|tojson }},
+    futLabels: {{ bci_fut_labels|tojson }},
+    futValues: {{ bci_fut_values|tojson }}
+  };
+  window.__PPI = {
+    labels:    {{ ppi_labels|tojson }},
+    values:    {{ ppi_values|tojson }},
+    futLabels: {{ ppi_fut_labels|tojson }},
+    futValues: {{ ppi_fut_values|tojson }}
+  };
+  console.log('BCI ctx →', window.__BCI);
+  console.log('PPI ctx →', window.__PPI);
+  console.log('charts.js present?', typeof window.EconCharts?.initLineForecastChart);
+</script>
+
 
 </body>
 </html>
