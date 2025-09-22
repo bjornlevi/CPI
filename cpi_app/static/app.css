@@ -137,3 +137,9 @@ a.active {
 .rowfoot { display: flex; align-items: center; }
 .btn-link { text-decoration: none; }
 .btn-link:hover { text-decoration: underline; }
+
+/* sortable stats table */
+.stats td.num, .stats th.num { text-align: right; }
+.stats--sortable th { cursor: pointer; }
+.stats--sortable th[aria-sort="ascending"]::after  { content: " ▲"; opacity: .6; }
+.stats--sortable th[aria-sort="descending"]::after { content: " ▼"; opacity: .6; }

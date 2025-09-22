@@ -28,69 +28,76 @@
         <canvas id="cpiChart"></canvas>
       </div>
 
-      <!-- Movers + stats under the chart -->
-      <div class="stat-card">
-        <div class="stat-card__title">Samantekt – VNV</div>
+    <div class="stat-card">
+      <div class="stat-card__title">Undirliðir sem hreyfðust mest nýlega</div>
 
-        {% if cpi_movers %}
-        <div class="movers">
-          <strong>Undirliðir sem hreyfðust mest nýlega:</strong>
-          <ul class="movers-list">
-            {% for m in cpi_movers %}
-            <li>
-              <span class="lbl">{{ m.label }}</span>
-              <span class="pct">
-                Mán:
-                {% if m.mom is not none %}
-                  <span class="{{ 'pos' if m.mom >= 0 else 'neg' }}">{{ '%.2f'|format(m.mom) }}%</span>
-                {% else %} — {% endif %}
-                · Ár:
-                {% if m.yoy is not none %}
-                  <span class="{{ 'pos' if m.yoy >= 0 else 'neg' }}">{{ '%.2f'|format(m.yoy) }}%</span>
-                {% else %} — {% endif %}
-              </span>
-              {% if m.d_mom is not none or m.d_yoy is not none %}
-              <small class="muted">
-                (ΔM: {% if m.d_mom is not none %}{{ m.d_mom|round(2) }}pp{% else %}—{% endif %}
-                · ΔÁ: {% if m.d_yoy is not none %}{{ m.d_yoy|round(2) }}pp{% else %}—{% endif %})
-              </small>
-              {% endif %}
-            </li>
-            {% endfor %}
-          </ul>
-        </div>
-        {% endif %}
+      <table class="stats stats--sortable" id="subTable">
+        <thead>
+          <tr>
+            <th data-key="label">Liður</th>
+            <th data-key="mom"  class="num" aria-sort="none">Mán %</th>
+            <th data-key="yoy"  class="num" aria-sort="descending">Ár %</th>
+            <th data-key="d_mom" class="num" aria-sort="none">ΔM (pp)</th>
+            <th data-key="d_yoy" class="num" aria-sort="none">ΔÁ (pp)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
 
-        <table class="stats">
-          <thead>
-            <tr>
-              <th>Breyt­ing</th>
-              <th>Meðaltal (saga)</th>
-              <th>Miðgildi (saga)</th>
-              <th>Núverandi</th>
-              <th>Spá (næstu {{ cpi_table.monthly.horizon }})</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Mánaðar</td>
-              <td>{{ cpi_table.monthly.historic_avg  is not none and ('%.2f'|format(cpi_table.monthly.historic_avg))  ~ '%' or '—' }}</td>
-              <td>{{ cpi_table.monthly.historic_med  is not none and ('%.2f'|format(cpi_table.monthly.historic_med))  ~ '%' or '—' }}</td>
-              <td>{{ cpi_table.monthly.current       is not none and ('%.2f'|format(cpi_table.monthly.current))       ~ '%' or '—' }}</td>
-              <td>
-                {{ cpi_table.monthly.projected_avg is not none and ('%.2f'|format(cpi_table.monthly.projected_avg)) ~ '%' or '—' }}
-                <small class="muted">/ miðg. {{ cpi_table.monthly.projected_med is not none and ('%.2f'|format(cpi_table.monthly.projected_med)) ~ '%' or '—' }}</small>
-              </td>
-            </tr>
-            <tr>
-              <td>Árleg</td>
-              <td>{{ cpi_table.yearly.historic_avg  is not none and ('%.2f'|format(cpi_table.yearly.historic_avg))  ~ '%' or '—' }}</td>
-              <td>{{ cpi_table.yearly.historic_med  is not none and ('%.2f'|format(cpi_table.yearly.historic_med))  ~ '%' or '—' }}</td>
-              <td>{{ cpi_table.yearly.current       is not none and ('%.2f'|format(cpi_table.yearly.current))       ~ '%' or '—' }}</td>
-              <td>{{ cpi_table.yearly.projected     is not none and ('%.2f'|format(cpi_table.yearly.projected))     ~ '%' or '—' }}</td>
-            </tr>
-          </tbody>
-        </table>
+    <script>
+    (function () {
+      // Server-provided movers list (curated + top movers)
+      const DATA = {{ cpi_movers|tojson }};
+
+      const tbody = document.querySelector('#subTable tbody');
+
+      const fmtPct = v => (v == null ? '—' : (v >= 0 ? `${v.toFixed(2)}%` : `${v.toFixed(2)}%`));
+      const fmtPP  = v => (v == null ? '—' : (v >= 0 ? `${v.toFixed(2)}pp` : `${v.toFixed(2)}pp`));
+      const cls    = v => (v == null ? '' : (v >= 0 ? 'pos' : 'neg'));
+
+      function render(sortKey = 'yoy', dir = 'desc') {
+        const sorted = [...DATA].sort((a, b) => {
+          const va = a[sortKey]; const vb = b[sortKey];
+          // Put nulls at bottom
+          if (va == null && vb == null) return 0;
+          if (va == null) return 1;
+          if (vb == null) return -1;
+          return dir === 'desc' ? (vb - va) : (va - vb);
+        });
+
+        tbody.innerHTML = sorted.map(r => `
+          <tr>
+            <td>${r.label || r.code}</td>
+            <td class="num ${cls(r.mom)}">${fmtPct(r.mom)}</td>
+            <td class="num ${cls(r.yoy)}">${fmtPct(r.yoy)}</td>
+            <td class="num ${cls(r.d_mom)}">${fmtPP(r.d_mom)}</td>
+            <td class="num ${cls(r.d_yoy)}">${fmtPP(r.d_yoy)}</td>
+          </tr>
+        `).join('');
+
+        // Update visual sort indicators
+        document.querySelectorAll('#subTable thead th').forEach(th => th.setAttribute('aria-sort','none'));
+        const th = document.querySelector(`#subTable thead th[data-key="${sortKey}"]`);
+        if (th) th.setAttribute('aria-sort', dir === 'desc' ? 'descending' : 'ascending');
+      }
+
+      // Click headers to sort
+      document.querySelectorAll('#subTable thead th').forEach(th => {
+        th.addEventListener('click', () => {
+          const key = th.dataset.key;
+          const current = th.getAttribute('aria-sort') || 'none';
+          // Toggle sort direction for the clicked column
+          const nextDir = (current === 'descending') ? 'asc' : 'desc';
+          render(key, nextDir);
+        });
+      });
+
+      // Default: sort by YoY descending
+      render('yoy', 'desc');
+    })();
+    </script>
+
       </div>
     </div>
   </section>
