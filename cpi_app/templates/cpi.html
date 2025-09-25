@@ -7,7 +7,8 @@
 
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="{{ url_for('static', filename='js/charts.js') }}?v=12"></script>
+  <script src="{{ url_for('static', filename='js/charts.js') }}?v=13"></script>
+
 </head>
 <body>
 <header class="topbar">
@@ -34,7 +35,6 @@
         <canvas id="cpiChart"></canvas>
       </div>
 
-      <!-- === RESTORED: Summary table === -->
       <div class="stat-card" style="margin-top:1rem">
         <div class="stat-card__title">Samantekt – VNV</div>
         <table class="stats">
@@ -146,12 +146,12 @@
 <!-- Chart init -->
 <script>
   EconCharts.initCPIChart('cpiChart', {
-    fullLabels: {{ full_labels|default(cpi_full_labels)|default(labels)|tojson }},
-    fullValues: {{ full_values|default(cpi_full_values)|default(values)|tojson }},
+    fullLabels: {{ full_labels|tojson }},
+    fullValues: {{ full_values|tojson }},
     futLabels:  {{ fut_labels|tojson }},
     futValues:  {{ fut_values|tojson }},
-    subMeta:    {{ cpi_sub_meta|default([])|tojson }},
-    subSeries:  {{ cpi_sub_series|default({})|tojson }},
+    subMeta:    {{ cpi_sub_meta|tojson }},
+    subSeries:  {{ cpi_sub_series|tojson }},
     initialRange: "5y"
   });
 </script>

@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- bump the version to bust cache so maintainAspectRatio:false is picked up -->
-  <script src="{{ url_for('static', filename='js/charts.js') }}?v=12"></script>
+  <script src="{{ url_for('static', filename='js/charts.js') }}?v=13"></script>
+
 </head>
 <body>
 <header class="topbar">
@@ -22,7 +22,7 @@
         <small class="muted">Síðast uppfært: {{ bci_updated }}</small>
       </div>
 
-      <div class="range-controls" data-chart="cpiChart">
+      <div class="range-controls" data-chart="bciChart">
         <button type="button" data-range="2y"  class="is-active">2 ár</button>
         <button type="button" data-range="5y">5 ár</button>
         <button type="button" data-range="10y">10 ár</button>

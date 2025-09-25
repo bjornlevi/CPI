@@ -490,14 +490,6 @@ def _ppi_context(requested_cat: str | None):
             select(PPIActual).where(PPIActual.category == cat).order_by(PPIActual.date)
         ).all()
 
-        # ---- FULL HISTORY ----
-        ppi_full_labels = [a.date.strftime("%Y-%m") for a in actuals]
-        ppi_full_values = [a.index_value for a in actuals]
-
-        # last 24 for initial/default
-        labels = ppi_full_labels[-24:]
-        values = ppi_full_values[-24:]
-
         best_run_id = s.scalar(
             select(PPIForecastPoint.run_id)
             .where(PPIForecastPoint.category == cat)
@@ -512,21 +504,26 @@ def _ppi_context(requested_cat: str | None):
             .order_by(PPIForecastPoint.date)
         ).all() if best_run_id else []
 
+    full_labels = [a.date.strftime("%Y-%m") for a in actuals]
+    full_values = [a.index_value for a in actuals]
+
+    # keep 24m for quick summary if you need it elsewhere
+    labels = full_labels[-24:]
+    values = full_values[-24:]
+
     future     = future[:FORECAST_MONTHS]
     fut_labels = [p.date.strftime("%Y-%m") for p in future]
     fut_values = [p.predicted_index for p in future]
-    updated    = ppi_full_labels[-1] if ppi_full_labels else "N/A"
+    updated    = full_labels[-1] if full_labels else "N/A"
 
     return dict(
-        # FULL
-        ppi_full_labels=ppi_full_labels, ppi_full_values=ppi_full_values,
-        # 24m default
+        ppi_full_labels=full_labels, ppi_full_values=full_values,
         ppi_labels=labels, ppi_values=values,
-        # forecast
         ppi_fut_labels=fut_labels, ppi_fut_values=fut_values,
         ppi_updated=updated,
         ppi_category=cat, ppi_categories=cats,
     )
+
 
 # -----------------------------------------------------------------------------
 # Flask app / routes
