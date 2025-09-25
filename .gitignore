@@ -33,6 +33,7 @@ htmlcov/
 # --- Local data & databases ---
 data/**/*.sqlite*
 data/**/*.db
+cpi_app/data/*.sqlite
 *.sqlite*
 *.db
 
