@@ -21,6 +21,12 @@
           <h2>Vísitala neysluverðs</h2>
           <small class="muted">Síðast uppfært: {{ updated }}</small>
         </div>
+        <div class="range-controls" data-chart="cpiChart">
+          <button type="button" data-range="2y"  class="is-active">2 ár</button>
+          <button type="button" data-range="5y">5 ár</button>
+          <button type="button" data-range="10y">10 ár</button>
+          <button type="button" data-range="all">Allt</button>
+        </div>        
         <div class="chart-box">
           <canvas id="cpiChart"></canvas>
         </div>
@@ -37,6 +43,12 @@
           <h2>Launavísitala – {{ wage_category }}</h2>
           <small class="muted">Síðast uppfært: {{ wages_updated }}</small>
         </div>
+        <div class="range-controls" data-chart="wageChart">
+          <button type="button" data-range="2y"  class="is-active">2 ár</button>
+          <button type="button" data-range="5y">5 ár</button>
+          <button type="button" data-range="10y">10 ár</button>
+          <button type="button" data-range="all">Allt</button>
+        </div>        
         <div class="chart-box">
           <canvas id="wageChart"></canvas>
         </div>
@@ -53,6 +65,12 @@
           <h2>Byggingarkostnaðarvísitala</h2>
           <small class="muted">Síðast uppfært: {{ bci_updated }}</small>
         </div>
+        <div class="range-controls" data-chart="bciChart">
+          <button type="button" data-range="2y"  class="is-active">2 ár</button>
+          <button type="button" data-range="5y">5 ár</button>
+          <button type="button" data-range="10y">10 ár</button>
+          <button type="button" data-range="all">Allt</button>
+        </div>        
         <div class="chart-box">
           <canvas id="bciChart"></canvas>
         </div>
@@ -69,6 +87,12 @@
           <h2>Vísitala framleiðsluverðs</h2>
           <small class="muted">Síðast uppfært: {{ ppi_updated }}</small>
         </div>
+        <div class="range-controls" data-chart="ppiChart">
+          <button type="button" data-range="2y"  class="is-active">2 ár</button>
+          <button type="button" data-range="5y">5 ár</button>
+          <button type="button" data-range="10y">10 ár</button>
+          <button type="button" data-range="all">Allt</button>
+        </div>        
         <div class="chart-box">
           <canvas id="ppiChart"></canvas>
         </div>
@@ -84,34 +108,38 @@
 <footer class="footer"><div class="wrap"><small class="muted">© {{ site_name }}</small></div></footer>
 
 <script>
-  // Home: total CPI + forecast only (no subcategories)
   EconCharts.initCPIChart('cpiChart', {
-    labels:     {{ labels|tojson }},
-    values:     {{ values|tojson }},
+    fullLabels: {{ full_labels|tojson }},
+    fullValues: {{ full_values|tojson }},
     futLabels:  {{ fut_labels|tojson }},
-    futValues:  {{ fut_values|tojson }}
+    futValues:  {{ fut_values|tojson }},
+    initialRange: "2y"
   });
 
   EconCharts.initWageChart('wageChart', {
-    labels:    {{ wages_labels|tojson }},
-    values:    {{ wages_values|tojson }},
-    futLabels: {{ wages_fut_labels|tojson }},
-    futValues: {{ wages_fut_values|tojson }}
+    fullLabels: {{ wages_full_labels|tojson }},
+    fullValues: {{ wages_full_values|tojson }},
+    futLabels:  {{ wages_fut_labels|tojson }},
+    futValues:  {{ wages_fut_values|tojson }},
+    initialRange: "2y"
   });
 
   EconCharts.initLineForecastChart('bciChart', {
-    labels:    {{ bci_labels|tojson }},
-    values:    {{ bci_values|tojson }},
-    futLabels: {{ bci_fut_labels|tojson }},
-    futValues: {{ bci_fut_values|tojson }}
+    fullLabels: {{ bci_full_labels|tojson }},
+    fullValues: {{ bci_full_values|tojson }},
+    futLabels:  {{ bci_fut_labels|tojson }},
+    futValues:  {{ bci_fut_values|tojson }},
+    initialRange: "2y"
   });
 
   EconCharts.initLineForecastChart('ppiChart', {
-    labels:    {{ ppi_labels|tojson }},
-    values:    {{ ppi_values|tojson }},
-    futLabels: {{ ppi_fut_labels|tojson }},
-    futValues: {{ ppi_fut_values|tojson }}
+    fullLabels: {{ ppi_full_labels|tojson }},
+    fullValues: {{ ppi_full_values|tojson }},
+    futLabels:  {{ ppi_fut_labels|tojson }},
+    futValues:  {{ ppi_fut_values|tojson }},
+    initialRange: "2y"
   });
 </script>
+
 </body>
 </html>

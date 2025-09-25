@@ -22,7 +22,13 @@
         <h2>{{ wage_category }}</h2>
         <small class="muted">Síðast uppfært: {{ wages_updated }}</small>
       </div>
-
+      <div class="range-controls" data-chart="cpiChart">
+        <button type="button" data-range="2y"  class="is-active">2 ár</button>
+        <button type="button" data-range="5y">5 ár</button>
+        <button type="button" data-range="10y">10 ár</button>
+        <button type="button" data-range="all">Allt</button>
+      </div>
+      
       <p class="muted small" style="margin:0">
         Skoða:
         {% for c in wage_categories %}
@@ -31,7 +37,6 @@
         {% endfor %}
       </p>
 
-      <!-- FIX: controlled-height container so chart isn't huge -->
       <div class="chart-box chart-box--md">
         <canvas id="wageChart"></canvas>
       </div>
@@ -89,11 +94,13 @@
 
 <script>
   EconCharts.initWageChart('wageChart', {
-    labels:    {{ wages_labels|tojson }},
-    values:    {{ wages_values|tojson }},
-    futLabels: {{ wages_fut_labels|tojson }},
-    futValues: {{ wages_fut_values|tojson }}
+    fullLabels: {{ wages_full_labels|tojson }},
+    fullValues: {{ wages_full_values|tojson }},
+    futLabels:  {{ wages_fut_labels|tojson }},
+    futValues:  {{ wages_fut_values|tojson }},
+    initialRange: "5y"
   });
 </script>
+
 </body>
 </html>

@@ -1,6 +1,6 @@
 // cpi_app/static/js/charts.js
-// bump version in your template to force reload: ?v=12
-console.log("charts.js v12 loaded");
+// bump ?v=13 in templates after updating this file
+console.log("charts.js v13 loaded");
 
 (function (global) {
   // ---------- helpers ----------
@@ -10,6 +10,28 @@ console.log("charts.js v12 loaded");
   function pct(curr, prev) {
     if (curr == null || prev == null || prev === 0) return null;
     return (curr / prev - 1) * 100;
+  }
+
+  // YYYY-MM -> months since year 0 (fast compare)
+  function ymToIndex(ym) {
+    const y = Number(ym.slice(0, 4));
+    const m = Number(ym.slice(5, 7));
+    return y * 12 + (m - 1);
+  }
+
+  // Compute slice start index for last N years; if "all" return 0
+  function sliceStart(fullLabels, range) {
+    if (range === "all") return 0;
+    const years = range === "10y" ? 10 : range === "5y" ? 5 : 2; // default mapping
+    const lastIdx = fullLabels.length - 1;
+    if (lastIdx < 0) return 0;
+    const lastMonthIdx = ymToIndex(fullLabels[lastIdx]);
+    const minMonthIdx = lastMonthIdx - years * 12 + 1;
+    // find first label >= min month
+    for (let i = 0; i < fullLabels.length; i++) {
+      if (ymToIndex(fullLabels[i]) >= minMonthIdx) return i;
+    }
+    return 0;
   }
 
   function getCtx(id) {
@@ -56,7 +78,7 @@ console.log("charts.js v12 loaded");
     },
   };
 
-  // Tooltip config (Chart.js v4)
+  // Tooltip config (Chart.js v4) that computes MoM/YoY from the currently shown combined series
   function makeTooltipConfig(labels, seriesFor) {
     return {
       displayColors: false,
@@ -71,9 +93,8 @@ console.log("charts.js v12 loaded");
           if (!items || !items.length) return [];
           const idx = items[0].dataIndex;
           const dsLabel = items[0].dataset.label;
-          const s = seriesFor(dsLabel);
+          const s = seriesFor(dsLabel); // combined series (history slice + forecast)
           if (!s) return [];
-
           const curr = s[idx];
           const prev = idx > 0 ? s[idx - 1] : null;
 
@@ -92,74 +113,88 @@ console.log("charts.js v12 loaded");
     };
   }
 
+  // Store charts + data to enable range switching from buttons
+  const registry = {}; // id -> { chart, applyRange, buttons }
+
+  // Common range control binding for <div class="range-controls" data-chart="...">
+  function wireRangeControls(canvasId, applyRange, initialRange) {
+    const ctrls = document.querySelectorAll(`.range-controls[data-chart="${canvasId}"]`);
+    ctrls.forEach(ctrl => {
+      ctrl.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-range]");
+        if (!btn) return;
+        const r = btn.dataset.range;
+        // toggle active class
+        ctrl.querySelectorAll("button[data-range]").forEach(b => b.classList.toggle("is-active", b === btn));
+        applyRange(r);
+      });
+      // set default active
+      const def = ctrl.querySelector(`button[data-range="${initialRange}"]`) ||
+                  ctrl.querySelector(`button[data-range]`);
+      if (def) def.classList.add("is-active");
+    });
+  }
+
   // ---------- CPI (with optional sub-series) ----------
   function initCPIChart(
     canvasId,
-    { labels, values, futLabels, futValues, subMeta, subSeries }
+    { fullLabels, fullValues, futLabels, futValues, subMeta, subSeries, initialRange = "2y" }
   ) {
-    const L = labels || [];
-    const FL = futLabels || [];
-    const V = values || [];
-    const FV = futValues || [];
+    const FL = Array.isArray(fullLabels) ? fullLabels : [];
+    const FVals = Array.isArray(fullValues) ? fullValues : [];
+    const FTL = Array.isArray(futLabels) ? futLabels : [];
+    const FTV = Array.isArray(futValues) ? futValues : [];
 
-    const labelsAll = L.concat(FL);
-    const totalCombined = V.concat(FV);
-
-    const datasets = [
+    // datasets (we will re-slice them in applyRange)
+    const baseDatasets = [
       {
+        key: "__TOTAL__", // internal key
         label: "VNV vísitala",
-        data: V.concat(Array(FL.length).fill(null)),
-        borderWidth: 2,
-        tension: 0.2,
-        pointRadius: 2,
-        pointHoverRadius: 4,
+        baseSeries: FVals,      // full history
+        colorHint: 0,
       },
       {
+        key: "__TOTAL_FORE__",
         label: "Spáð þróun",
-        data: Array(V.length).fill(null).concat(FV),
-        borderDash: [6, 4],
-        borderWidth: 2,
-        tension: 0.2,
-        pointRadius: 2,
-        pointHoverRadius: 4,
-        pointHitRadius: 6,
-      },
+        baseSeries: FVals,      // same base, forecast appended separately
+        dash: [6,4],
+        colorHint: 1,
+      }
     ];
 
-    // optional sub-series (hidden by default)
-    (subMeta || []).forEach((m) => {
-      const base = (subSeries && subSeries[m.code]) ? subSeries[m.code] : [];
-      datasets.push({
+    (subMeta || []).forEach(m => {
+      const series = (subSeries && subSeries[m.code]) ? subSeries[m.code] : [];
+      baseDatasets.push({
+        key: `SUB:${m.code}`,
         label: m.label,
-        data: base.concat(Array(FL.length).fill(null)),
-        borderWidth: 2,
-        tension: 0.2,
-        pointRadius: 0,
-        hidden: true,
+        baseSeries: series,
+        hidden: true
       });
     });
 
-    function seriesFor(label) {
-      if (label === "VNV vísitala" || label === "Spáð þróun") return totalCombined;
-      const m = (subMeta || []).find((x) => x.label === label);
-      if (!m) return null;
-      const base = (subSeries && subSeries[m.code]) ? subSeries[m.code] : [];
-      return base.concat(Array(FL.length).fill(null));
-    }
-
     const ctx = getCtx(canvasId);
     if (!ctx || typeof Chart === "undefined") return null;
 
-    return new Chart(ctx, {
+    // build initial skeleton chart (empty data for now)
+    const chart = new Chart(ctx, {
       type: "line",
-      data: { labels: labelsAll, datasets },
+      data: { labels: [], datasets: baseDatasets.map(d => ({
+        label: d.label,
+        data: [],
+        borderWidth: 2,
+        tension: 0.2,
+        pointRadius: d.key.includes("__FORE__") ? 2 : 2,
+        pointHoverRadius: 4,
+        borderDash: d.dash || [],
+        hidden: !!d.hidden
+      })) },
       options: {
         responsive: true,
-        maintainAspectRatio: false, // let CSS container control height
+        maintainAspectRatio: false,
         interaction: { mode: "nearest", intersect: false },
         plugins: {
           legend: { position: "bottom" },
-          tooltip: makeTooltipConfig(labelsAll, seriesFor),
+          tooltip: makeTooltipConfig([], () => null), // will be replaced on applyRange
         },
         scales: {
           x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
@@ -168,54 +203,73 @@ console.log("charts.js v12 loaded");
       },
       plugins: [hoverYearMarker],
     });
+
+    function applyRange(range) {
+      const start = sliceStart(FL, range);
+      const histL = FL.slice(start);
+      const histV = FVals.slice(start);
+
+      const labelsAll = histL.concat(FTL);
+
+      // Build dataset values
+      const combinedForTooltip = {}; // label -> combined numeric series
+
+      chart.data.labels = labelsAll;
+
+      chart.data.datasets.forEach((ds, idx) => {
+        const spec = baseDatasets[idx];
+        const base = spec.baseSeries.slice(start); // slice history for this series
+
+        if (spec.key === "__TOTAL__") {
+          // actuals + nulls for forecast
+          ds.data = base.concat(Array(FTV.length).fill(null));
+          combinedForTooltip[ds.label] = base.concat(FTV);
+        } else if (spec.key === "__TOTAL_FORE__") {
+          // nulls for history + forecast
+          ds.data = Array(base.length).fill(null).concat(FTV);
+          combinedForTooltip[ds.label] = base.concat(FTV);
+        } else {
+          // sub-series: history only + nulls during forecast
+          ds.data = base.concat(Array(FTV.length).fill(null));
+          combinedForTooltip[ds.label] = base.concat(FTV.map(() => null)); // do not compute MoM/YoY vs nulls
+        }
+      });
+
+      // Replace tooltip with one that uses the current combined series
+      chart.options.plugins.tooltip = makeTooltipConfig(labelsAll, (label) => combinedForTooltip[label] || null);
+      chart.update();
+    }
+
+    registry[canvasId] = { chart, applyRange };
+    wireRangeControls(canvasId, applyRange, initialRange);
+    applyRange(initialRange);
+
+    return chart;
   }
 
   // ---------- Wages ----------
-  function initWageChart(canvasId, { labels, values, futLabels, futValues }) {
-    const L = labels || [];
-    const FL = futLabels || [];
-    const V = values || [];
-    const FV = futValues || [];
-
-    const labelsAll = L.concat(FL);
-    const combined = V.concat(FV);
-    const seriesFor = () => combined;
+  function initWageChart(canvasId, { fullLabels, fullValues, futLabels, futValues, initialRange = "2y" }) {
+    const FL = Array.isArray(fullLabels) ? fullLabels : [];
+    const FV = Array.isArray(fullValues) ? fullValues : [];
+    const FTL = Array.isArray(futLabels) ? futLabels : [];
+    const FTV = Array.isArray(futValues) ? futValues : [];
 
     const ctx = getCtx(canvasId);
     if (!ctx || typeof Chart === "undefined") return null;
 
-    return new Chart(ctx, {
+    const chart = new Chart(ctx, {
       type: "line",
-      data: {
-        labels: labelsAll,
-        datasets: [
-          {
-            label: "Launavísitala (þróun)",
-            data: V.concat(Array(FL.length).fill(null)),
-            borderWidth: 2,
-            tension: 0.25,
-            pointRadius: 2,
-            pointHoverRadius: 4,
-          },
-          {
-            label: "Launavísitala (spá)",
-            data: Array(V.length).fill(null).concat(FV),
-            borderDash: [6, 4],
-            borderWidth: 2,
-            tension: 0.25,
-            pointRadius: 2,
-            pointHoverRadius: 4,
-            pointHitRadius: 6,
-          },
-        ],
-      },
+      data: { labels: [], datasets: [
+        { label: "Launavísitala (þróun)", data: [], borderWidth: 2, tension: .25, pointRadius: 2, pointHoverRadius: 4 },
+        { label: "Launavísitala (spá)",   data: [], borderWidth: 2, tension: .25, pointRadius: 2, pointHoverRadius: 4, pointHitRadius: 6, borderDash: [6,4] }
+      ]},
       options: {
         responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: "nearest", intersect: false },
         plugins: {
           legend: { position: "bottom" },
-          tooltip: makeTooltipConfig(labelsAll, seriesFor),
+          tooltip: makeTooltipConfig([], () => null),
         },
         scales: {
           x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
@@ -224,54 +278,53 @@ console.log("charts.js v12 loaded");
       },
       plugins: [hoverYearMarker],
     });
+
+    function applyRange(range) {
+      const start = sliceStart(FL, range);
+      const histL = FL.slice(start);
+      const histV = FV.slice(start);
+      const labelsAll = histL.concat(FTL);
+
+      chart.data.labels = labelsAll;
+      const actual = histV.concat(Array(FTV.length).fill(null));
+      const fore   = Array(histV.length).fill(null).concat(FTV);
+      chart.data.datasets[0].data = actual;
+      chart.data.datasets[1].data = fore;
+
+      const combined = histV.concat(FTV);
+      chart.options.plugins.tooltip = makeTooltipConfig(labelsAll, () => combined);
+      chart.update();
+    }
+
+    registry[canvasId] = { chart, applyRange };
+    wireRangeControls(canvasId, applyRange, initialRange);
+    applyRange(initialRange);
+    return chart;
   }
 
   // ---------- Generic (BCI/PPI etc.) ----------
-  function initLineForecastChart(canvasId, { labels, values, futLabels, futValues }) {
-    const L = labels || [];
-    const FL = futLabels || [];
-    const V = values || [];
-    const FV = futValues || [];
-
-    const labelsAll = L.concat(FL);
-    const combined = V.concat(FV);
-    const seriesFor = () => combined;
+  function initLineForecastChart(canvasId, { fullLabels, fullValues, futLabels, futValues, initialRange = "2y" }) {
+    const FL = Array.isArray(fullLabels) ? fullLabels : [];
+    const FV = Array.isArray(fullValues) ? fullValues : [];
+    const FTL = Array.isArray(futLabels) ? futLabels : [];
+    const FTV = Array.isArray(futValues) ? futValues : [];
 
     const ctx = getCtx(canvasId);
     if (!ctx || typeof Chart === "undefined") return null;
 
-    return new Chart(ctx, {
+    const chart = new Chart(ctx, {
       type: "line",
-      data: {
-        labels: labelsAll,
-        datasets: [
-          {
-            label: "Þróun",
-            data: V.concat(Array(FL.length).fill(null)),
-            borderWidth: 2,
-            tension: 0.25,
-            pointRadius: 2,
-            pointHoverRadius: 4,
-          },
-          {
-            label: "Spá",
-            data: Array(V.length).fill(null).concat(FV),
-            borderDash: [6, 4],
-            borderWidth: 2,
-            tension: 0.25,
-            pointRadius: 2,
-            pointHoverRadius: 4,
-            pointHitRadius: 6,
-          },
-        ],
-      },
+      data: { labels: [], datasets: [
+        { label: "Þróun", data: [], borderWidth: 2, tension: .25, pointRadius: 2, pointHoverRadius: 4 },
+        { label: "Spá",   data: [], borderWidth: 2, tension: .25, pointRadius: 2, pointHoverRadius: 4, pointHitRadius: 6, borderDash: [6,4] }
+      ]},
       options: {
         responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: "nearest", intersect: false },
         plugins: {
           legend: { position: "bottom" },
-          tooltip: makeTooltipConfig(labelsAll, seriesFor),
+          tooltip: makeTooltipConfig([], () => null),
         },
         scales: {
           x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
@@ -280,9 +333,31 @@ console.log("charts.js v12 loaded");
       },
       plugins: [hoverYearMarker],
     });
+
+    function applyRange(range) {
+      const start = sliceStart(FL, range);
+      const histL = FL.slice(start);
+      const histV = FV.slice(start);
+      const labelsAll = histL.concat(FTL);
+
+      chart.data.labels = labelsAll;
+      const actual = histV.concat(Array(FTV.length).fill(null));
+      const fore   = Array(histV.length).fill(null).concat(FTV);
+      chart.data.datasets[0].data = actual;
+      chart.data.datasets[1].data = fore;
+
+      const combined = histV.concat(FTV);
+      chart.options.plugins.tooltip = makeTooltipConfig(labelsAll, () => combined);
+      chart.update();
+    }
+
+    registry[canvasId] = { chart, applyRange };
+    wireRangeControls(canvasId, applyRange, initialRange);
+    applyRange(initialRange);
+    return chart;
   }
 
-  // ---------- export (merge, don't overwrite) ----------
+  // ---------- export ----------
   global.EconCharts = Object.assign({}, global.EconCharts, {
     initCPIChart,
     initWageChart,

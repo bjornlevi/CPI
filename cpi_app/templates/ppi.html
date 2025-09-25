@@ -22,7 +22,12 @@
         <h2>{{ ppi_category }}</h2>
         <small class="muted">Síðast uppfært: {{ ppi_updated }}</small>
       </div>
-
+      <div class="range-controls" data-chart="cpiChart">
+        <button type="button" data-range="2y"  class="is-active">2 ár</button>
+        <button type="button" data-range="5y">5 ár</button>
+        <button type="button" data-range="10y">10 ár</button>
+        <button type="button" data-range="all">Allt</button>
+      </div>
       <p class="muted small" style="margin:0">
         Skoða:
         {% for c in ppi_categories %}
@@ -31,7 +36,6 @@
         {% endfor %}
       </p>
 
-      <!-- FIX: controlled height container -->
       <div class="chart-box chart-box--md">
         <canvas id="ppiChart"></canvas>
       </div>
@@ -45,11 +49,13 @@
 
 <script>
   EconCharts.initLineForecastChart('ppiChart', {
-    labels:    {{ ppi_labels|tojson }},
-    values:    {{ ppi_values|tojson }},
-    futLabels: {{ ppi_fut_labels|tojson }},
-    futValues: {{ ppi_fut_values|tojson }}
+    fullLabels: {{ ppi_full_labels|tojson }},
+    fullValues: {{ ppi_full_values|tojson }},
+    futLabels:  {{ ppi_fut_labels|tojson }},
+    futValues:  {{ ppi_fut_values|tojson }},
+    initialRange: "5y"
   });
 </script>
+
 </body>
 </html>
