@@ -114,7 +114,9 @@
     fullValues: {{ full_values|tojson }},
     futLabels:  {{ fut_labels|tojson }},
     futValues:  {{ fut_values|tojson }},
-    initialRange: "2y"
+    subMeta:    {{ cpi_sub_meta|tojson }},
+    subSeries:  {{ cpi_sub_series|tojson }},   <!-- full-length per code -->
+    initialRange: "5y"
   });
 
   EconCharts.initWageChart('wageChart', {

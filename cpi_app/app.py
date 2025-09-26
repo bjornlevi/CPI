@@ -165,10 +165,14 @@ def _structured_change_table(values: list[float], fut_values: list[float],
 from typing import Tuple, List, Dict, Any
 
 def _cpi_context() -> dict:
-    """Build context for CPI total + forecast + subcategory overlays (aligned to last 24 months)."""
+    """Build context for CPI: totals, forecast, full-length sub-series, movers, table."""
     with Session(engine) as s:
+        # full history from DB
         cpi_actuals = s.scalars(select(CPIActual).order_by(CPIActual.date)).all()
+        full_labels = [a.date.strftime("%Y-%m") for a in cpi_actuals]
+        full_values = [a.cpi for a in cpi_actuals]
 
+        # latest forecast run (points are only future months)
         best_run_id = s.scalar(
             select(ForecastPoint.run_id)
             .group_by(ForecastPoint.run_id)
@@ -183,41 +187,110 @@ def _cpi_context() -> dict:
                 .order_by(ForecastPoint.date)
             ).all()
 
-    # Full history (in case you want it elsewhere)
-    cpi_full_labels = [a.date.strftime("%Y-%m") for a in cpi_actuals]
-    cpi_full_values = [a.cpi for a in cpi_actuals]
+    # short 24-month window used on the homepage
+    labels_24 = full_labels[-24:]
+    values_24 = full_values[-24:]
 
-    # Base axis for the chart (last 24 months)
-    labels = cpi_full_labels[-24:]
-    values = cpi_full_values[-24:]
-
-    # Forecast capped to UI horizon
+    # forecast (cap to UI horizon)
     cpi_future = cpi_future[:FORECAST_MONTHS]
     fut_labels = [p.date.strftime("%Y-%m") for p in cpi_future]
     fut_values = [p.predicted_cpi for p in cpi_future]
-    updated    = cpi_full_labels[-1] if cpi_full_labels else "N/A"
 
-    # Stats table
-    cpi_table = _structured_change_table(values, fut_values, len(labels), len(fut_labels))
+    updated = full_labels[-1] if full_labels else "N/A"
+    cpi_table = _structured_change_table(values_24, fut_values, len(labels_24), len(fut_labels))
 
-    # Sub-CPI overlays (aligned to `labels`)
-    cpi_sub_meta, cpi_sub_series, cpi_movers = build_cpi_subseries(labels)
+    # ---------- build full-length sub-series ----------
+    # We fetch raw CPI from Hagstofan and map it onto full_labels.
+    cpi_src = fetch_cpi_data()
+
+    def series_for(code: str, on_labels: list[str]) -> list[float | None]:
+        df = get_isnr_series(cpi_src, code)  # df has columns: date, value, Monthly Change
+        lookup = {d.strftime("%Y-%m"): float(v) for d, v in zip(df["date"], df["value"])}
+        return [lookup.get(lbl) for lbl in on_labels]
+
+    curated_meta = [{"code": c, "label": isnr_label(c) or c} for c in CURATED_ISNR]
+    # FULL history for sub-series (this is what the range control needs)
+    curated_series_full = {c: series_for(c, full_labels) for c in CURATED_ISNR}
+
+    # ---------- movers (latest month deltas vs total) ----------
+    rows = []
+    picked = []
+    with Session(engine) as s2:
+        latest_date = s2.scalar(select(func.max(CPISubMetric.date)))
+        if latest_date:
+            rows = s2.execute(
+                select(CPISubMetric).where(CPISubMetric.date == latest_date)
+            ).scalars().all()
+            scored = []
+            for r in rows:
+                if r.code in CURATED_ISNR:
+                    continue
+                score = (
+                    abs(r.delta_yoy_vs_total) if r.delta_yoy_vs_total is not None
+                    else (abs(r.delta_mom_vs_total) if r.delta_mom_vs_total is not None else None)
+                )
+                if score is not None:
+                    scored.append((score, r))
+            scored.sort(key=lambda t: t[0], reverse=True)
+            picked = [r for _, r in scored[:6]]
+
+    top_meta = [{"code": r.code, "label": r.label} for r in picked]
+    top_series_full = {r.code: series_for(r.code, full_labels) for r in picked}
+
+    # merge curated + top (dedupe by code)
+    seen = set()
+    cpi_sub_meta: list[dict] = []
+    cpi_sub_series_full: dict[str, list[float | None]] = {}
+    for meta_list, series_map in ((curated_meta, curated_series_full), (top_meta, top_series_full)):
+        for m in meta_list:
+            if m["code"] in seen:
+                continue
+            seen.add(m["code"])
+            cpi_sub_meta.append(m)
+            cpi_sub_series_full[m["code"]] = series_map[m["code"]]
+
+    # movers table rows (curated first, then top picks)
+    rows_by_code = {r.code: r for r in rows}
+    curated_data = []
+    for code in CURATED_ISNR:
+        r = rows_by_code.get(code)
+        if not r:
+            continue
+        curated_data.append({
+            "code": code,
+            "label": r.label or code,
+            "mom": r.mom, "yoy": r.yoy,
+            "d_mom": r.delta_mom_vs_total, "d_yoy": r.delta_yoy_vs_total,
+        })
+
+    seen = {d["code"] for d in curated_data}
+    top_data = []
+    for r in picked:
+        if r.code in seen:
+            continue
+        top_data.append({
+            "code": r.code,
+            "label": r.label or r.code,
+            "mom": r.mom, "yoy": r.yoy,
+            "d_mom": r.delta_mom_vs_total, "d_yoy": r.delta_yoy_vs_total,
+        })
+
+    cpi_movers = curated_data + top_data
 
     return dict(
-        labels=labels, values=values,
+        # short window (homepage)
+        labels=labels_24, values=values_24,
+        # full history (detail page + range control)
+        full_labels=full_labels, full_values=full_values,
+        # forecast
         fut_labels=fut_labels, fut_values=fut_values,
         updated=updated,
-        cpi_sub_meta=cpi_sub_meta, cpi_sub_series=cpi_sub_series,
+        # sub-series (FULL history aligned to full_labels)
+        cpi_sub_meta=cpi_sub_meta,
+        cpi_sub_series=cpi_sub_series_full,
+        # tables
         cpi_table=cpi_table,
         cpi_movers=cpi_movers,
-
-        # full history (existing keys)
-        cpi_full_labels=cpi_full_labels,
-        cpi_full_values=cpi_full_values,
-
-        # aliases if your template expects these
-        full_labels=cpi_full_labels,
-        full_values=cpi_full_values,
     )
 
 def build_cpi_subseries(label_list: List[str]) -> Tuple[List[dict], Dict[str, List[float]], List[dict]]:
@@ -553,21 +626,12 @@ def create_app():
     # CPI detail (with sub-series)
     @app.get("/cpi")
     def cpi_page():
-        # Context from DB (totals, forecast, sub-series, movers, table)
-        ctx = _cpi_context()
-
-        # Full history for range controls
-        with Session(engine) as s:
-            cpi_actuals = s.scalars(select(CPIActual).order_by(CPIActual.date)).all()
-        full_labels = [a.date.strftime("%Y-%m") for a in cpi_actuals]
-        full_values = [a.cpi for a in cpi_actuals]
-
-        # Build one payload; overwrite any same-named keys if they exist in ctx
-        payload = {"site_name": app.config["SITE_NAME"], **ctx}
-        payload["full_labels"] = full_labels
-        payload["full_values"] = full_values
-
-        return render_template("cpi.html", **payload)
+        ctx = _cpi_context()  # contains: full_labels/full_values, fut_*, cpi_sub_meta, cpi_sub_series (FULL), tables, movers
+        return render_template(
+            "cpi.html",
+            site_name=app.config["SITE_NAME"],
+            **ctx
+        )
 
     # Wages detail
     @app.get("/wages")
