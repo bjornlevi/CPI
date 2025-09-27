@@ -23,22 +23,29 @@
         <small class="muted">Síðast uppfært: {{ updated }}</small>
       </div>
 
-      <!-- Range controls -->
       <div class="range-controls" data-chart="cpiChart">
-        <button type="button" data-range="2y"  class="is-active">2 ár</button>
-        <button type="button" data-range="5y">5 ár</button>
-        <button type="button" data-range="10y">10 ár</button>
-        <button type="button" data-range="all">Allt</button>
-      </div>
+        <div class="range-buttons">
+          <button type="button" data-range="2y"  class="is-active">2 ár</button>
+          <button type="button" data-range="5y">5 ár</button>
+          <button type="button" data-range="10y">10 ár</button>
+          <button type="button" data-range="all">Allt</button>
+        </div>
 
-      <div class="norm-controls" data-chart="cpiChart">
-        <label class="checkbox">
-          <input type="checkbox" id="cpiChart-norm-toggle"> Normalisera
+        <div class="range-window">
+          <!-- left handle (start) -->
+          <input id="cpiChart-win-start" type="range" min="0" step="1">
+          <!-- right handle (end) -->
+          <input id="cpiChart-win-end"   type="range" min="1" step="1" class="is-end">
+          <div class="range-labels">
+            <span id="cpiChart-win-start-label">—</span>
+            <span id="cpiChart-win-end-label">—</span>
+          </div>
+        </div>
+
+        <label class="muted small" style="display:inline-flex;gap:.5rem;align-items:center;margin-top:.25rem">
+          <input id="cpiChart-norm-toggle" type="checkbox">
+          Normalisera (100 við upphaf glugga)
         </label>
-        <input type="range" id="cpiChart-base-slider" min="0" max="0" value="0" step="1" />
-        <small class="muted">
-          Grunnmánuður: <span id="cpiChart-base-label">—</span>
-        </small>
       </div>
 
       <div class="chart-box chart-box--md">
@@ -162,7 +169,7 @@
     futLabels:  {{ fut_labels|tojson }},
     futValues:  {{ fut_values|tojson }},
     subMeta:    {{ cpi_sub_meta|tojson }},
-    subSeries:  {{ cpi_sub_series|tojson }},   <!-- NOTE: use cpi_sub_series, not cpi_sub_series_full -->
+    subSeries:  {{ cpi_sub_series|tojson }}, 
     initialRange: "5y"
   });
 </script>

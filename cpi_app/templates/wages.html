@@ -22,18 +22,31 @@
         <h2>{{ wage_category }}</h2>
         <small class="muted">Síðast uppfært: {{ wages_updated }}</small>
       </div>
-      <div class="range-controls" data-chart="wageChart">
+
+      <div class="range-controls" data-chart="cpiChart">
+      <div class="range-buttons">
         <button type="button" data-range="2y"  class="is-active">2 ár</button>
         <button type="button" data-range="5y">5 ár</button>
         <button type="button" data-range="10y">10 ár</button>
         <button type="button" data-range="all">Allt</button>
       </div>
 
-      <div class="norm-controls" data-chart="wageChart">
-        <label class="checkbox"><input type="checkbox" id="wageChart-norm-toggle"> Normalisera</label>
-        <input type="range" id="wageChart-base-slider" min="0" max="0" value="0" step="1" />
-        <small class="muted">Grunnmánuður: <span id="wageChart-base-label">—</span></small>
+      <div class="range-window">
+        <!-- left handle (start) -->
+        <input id="cpiChart-win-start" type="range" min="0" step="1">
+        <!-- right handle (end) -->
+        <input id="cpiChart-win-end"   type="range" min="1" step="1" class="is-end">
+        <div class="range-labels">
+          <span id="cpiChart-win-start-label">—</span>
+          <span id="cpiChart-win-end-label">—</span>
+        </div>
       </div>
+
+      <label class="muted small" style="display:inline-flex;gap:.5rem;align-items:center;margin-top:.25rem">
+        <input id="cpiChart-norm-toggle" type="checkbox">
+        Normalisera (100 við upphaf glugga)
+      </label>
+    </div>
 
       <p class="muted small" style="margin:0">
         Skoða:

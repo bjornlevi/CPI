@@ -157,3 +157,54 @@ a.active {
 }
 .norm-controls .checkbox { display:flex; align-items:center; gap:.4rem; }
 .norm-controls input[type="range"] { width: 200px; }
+
+/* Two-handle window slider */
+.range-controls { display: grid; gap: .5rem; }
+.range-buttons { display:flex; gap:.5rem; flex-wrap:wrap; }
+.range-buttons .is-active { text-decoration: underline; }
+
+.range-window { position: relative; height: 36px; }
+.range-window input[type="range"]{
+  position: absolute; inset: 0;
+  width: 100%; margin: 0;
+  background: transparent;
+  /* KEY TRICK: the track does not eat events; only the thumb does */
+  pointer-events: none;
+  -webkit-appearance: none; appearance: none;
+}
+
+/* Visual track (WebKit/Blink) */
+.range-window input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px; background: rgba(255,255,255,.25); border-radius: 2px;
+}
+/* Thumb (only the thumb accepts pointer events) */
+.range-window input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  height: 14px; width: 14px; border-radius: 50%;
+  background: #e7edf3; border: 2px solid #12161a;
+  pointer-events: auto;
+  margin-top: -5px; /* center on 4px track */
+}
+
+/* Firefox */
+.range-window input[type="range"]::-moz-range-track {
+  height: 4px; background: rgba(255,255,255,.25); border-radius: 2px;
+}
+.range-window input[type="range"]::-moz-range-thumb {
+  height: 14px; width: 14px; border-radius: 50%;
+  background: #e7edf3; border: 2px solid #12161a;
+  pointer-events: auto;
+}
+
+/* Color-coding so you can see both handles */
+.range-window input[type="range"]:not(.is-end)::-webkit-slider-thumb { background: #7be495; } /* start = green */
+.range-window input[type="range"].is-end::-webkit-slider-thumb       { background: #8dc1ff; } /* end   = blue  */
+.range-window input[type="range"]:not(.is-end)::-moz-range-thumb     { background: #7be495; }
+.range-window input[type="range"].is-end::-moz-range-thumb           { background: #8dc1ff; }
+
+/* Make the right handle feel like it lives on the right */
+.range-window input[type="range"].is-end { z-index: 2; }
+.range-window input[type="range"]:not(.is-end) { z-index: 1; }
+
+
+.range-labels { display:flex; justify-content:space-between; font-size:.85rem; color:#9fb0c2; }
