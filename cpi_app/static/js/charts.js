@@ -1,37 +1,23 @@
-// static/js/charts.js  (v19)
+// static/js/charts.js  (v23)
 (function (global) {
-  console.log("charts.js loaded 19");
+  console.log("charts.js loaded 23");
 
-  const fmt = v => v == null ? '—' : Number(v).toLocaleString('is-IS', { maximumFractionDigits: 2 });
+  const fmt = v => v == null ? '—'
+    : Number(v).toLocaleString('is-IS', { maximumFractionDigits: 2 });
   const pct = (a, b) => (a == null || b == null || b === 0) ? null : (a / b - 1) * 100;
 
   function getCtx(id){ const c=document.getElementById(id); return c ? c.getContext('2d') : null; }
 
-  function applyVisibility(chart){
-    // Ensure we have a state bag
-    const active = chart.$state?.activeKeys || new Set();
-    (chart.data.datasets || []).forEach((d, i) => {
-      const key = d && d._key;
-      const visible = key ? active.has(key) : true;   // no key => treat as visible
-      const meta = chart.getDatasetMeta(i);
-      // Chart interprets null as visible, true as hidden
-      meta.hidden = visible ? null : true;
-    });
-  }
-
-
+  // ---- Legend: keep our own visibility set, and persist it across rebuilds
   function defaultLegendOnClick(e, legendItem, legend){
     const def = Chart.defaults.plugins.legend.onClick;
-    def && def.call(this, e, legendItem, legend);      // let Chart.js toggle
-
+    def && def.call(this, e, legendItem, legend);
     const ci   = legend.chart;
     const idx  = legendItem.datasetIndex;
     const meta = ci.getDatasetMeta(idx);
     const ds   = ci.data.datasets?.[idx];
     const key  = ds && ds._key;
     if (!key || !ci.$state) return;
-
-    // meta.hidden === true -> currently hidden; false/null -> visible
     if (meta.hidden === true) ci.$state.activeKeys.delete(key);
     else                      ci.$state.activeKeys.add(key);
   }
@@ -43,9 +29,11 @@
       const t = chart.tooltip;
       if (!t || !t.getActiveElements().length) return;
       const i = t.getActiveElements()[0].index;
-      const j = i - 12, x = chart.scales.x, top = chart.chartArea.top, bot = chart.chartArea.bottom, ctx = chart.ctx;
+      const j = i - 12;
+      const x = chart.scales.x, top = chart.chartArea.top, bot = chart.chartArea.bottom, ctx = chart.ctx;
       ctx.save();
-      if (j >= 0){ ctx.setLineDash([5,4]); ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.lineWidth=1;
+      if (j >= 0){
+        ctx.setLineDash([5,4]); ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.lineWidth=1;
         ctx.beginPath(); ctx.moveTo(x.getPixelForValue(j),top); ctx.lineTo(x.getPixelForValue(j),bot); ctx.stroke();
       }
       ctx.setLineDash([]); ctx.strokeStyle='rgba(255,255,255,.6)';
@@ -54,6 +42,7 @@
     }
   };
 
+  // ---- Tooltip builder
   function makeTooltipConfig(labels, seriesFor){
     return {
       displayColors: false,
@@ -67,30 +56,50 @@
           if (!s) return [];
           const curr = s[idx], prev = idx>0 ? s[idx-1] : null;
           const lines = [];
-          const mom = pct(curr, prev); if (mom != null) lines.push(`Mánaðarbreyting: ${mom.toFixed(2)}%`);
+          const mom = pct(curr, prev);
+          if (mom != null) lines.push(`Mánaðarbreyting: ${mom.toFixed(2)}%`);
           const j = idx - 12, prev12 = j >= 0 ? s[j] : null;
-          const yoy = pct(curr, prev12); if (yoy != null) lines.push(`Ársbreyting: ${yoy.toFixed(2)}% (vs ${labels[j]})`);
+          const yoy = pct(curr, prev12);
+          if (yoy != null) lines.push(`Ársbreyting: ${yoy.toFixed(2)}% (vs ${labels[j]})`);
           return lines;
         }
       }
     };
   }
 
-  // ---- Normalization + range helpers
-  const normalizeToBase = (arr, baseIdx) => {
-    if (!Array.isArray(arr) || baseIdx == null) return arr;
-    const base = arr[baseIdx];
-    if (base == null || base === 0) return arr.map(_ => null);
-    return arr.map(v => (v == null ? null : 100 * (v / base)));
-  };
+  // ---- Range & normalization helpers
   const monthsForRange = (key, total) =>
     key === 'all' ? total : key === '10y' ? Math.min(total,120)
     : key === '5y' ? Math.min(total,60) : Math.min(total,24);
 
+  // Normalize so that value at baseIdx is exactly 100 (when it exists)
+  function normalizeStrict(arr, baseIdx){
+    if (!Array.isArray(arr) || baseIdx == null) return arr;
+    const base = arr[baseIdx];
+    if (base == null || base === 0) return arr.map(_ => null);
+    const out = arr.map(v => (v == null ? null : 100 * (v / base)));
+    if (out.length > baseIdx && out[baseIdx] != null) out[baseIdx] = 100;
+    return out;
+  }
+  // Flexible: if base point is null, anchor at first non-null >= baseIdx
+  function normalizeFromIndex(arr, baseIdx){
+    if (!Array.isArray(arr) || baseIdx == null) return arr;
+    let k = baseIdx;
+    while (k < arr.length && (arr[k] == null || arr[k] === 0)) k++;
+    if (k >= arr.length) return arr.map(_ => null);
+    const base = arr[k];
+    const out = arr.map(v => (v == null ? null : 100 * (v / base)));
+    if (out.length > k && out[k] != null) out[k] = 100;
+    return out;
+  }
+
+  // Range buttons (2y/5y/10y/all) — they set the visible window length
   function hookRangeButtons(canvasId, onChange, initial='2y'){
     const box = document.querySelector(`.range-controls[data-chart="${canvasId}"]`);
     if (!box) { onChange(initial); return; }
-    const activate = key => box.querySelectorAll('button').forEach(b=>b.classList.toggle('is-active', b.dataset.range===key));
+    const activate = key => box.querySelectorAll('button').forEach(
+      b => b.classList.toggle('is-active', b.dataset.range === key)
+    );
     box.addEventListener('click', e=>{
       const b = e.target.closest('button[data-range]'); if (!b) return;
       const key = b.dataset.range; activate(key); onChange(key);
@@ -98,62 +107,58 @@
     activate(initial); onChange(initial);
   }
 
-  function attachNormalizeControls(canvasId, onToggle, onBaseChange, onHoverPreview){
+  // Slider + toggle: here the slider sets the **window start** (like the 2y button does)
+  function attachControls(canvasId, { onToggle, onStartChange, onHoverPreview }){
     const toggle = document.getElementById(`${canvasId}-norm-toggle`);
     const slider = document.getElementById(`${canvasId}-base-slider`);
     const label  = document.getElementById(`${canvasId}-base-label`);
     if (toggle) toggle.addEventListener('change', e => onToggle(!!e.target.checked));
     if (slider) {
-      slider.addEventListener('input', e => { onBaseChange(+e.target.value); });
+      slider.addEventListener('input', e => { onStartChange(+e.target.value); });
       const updateTitle = (i)=>{ const t = onHoverPreview?.(i) || '—'; slider.title = t; if (label) label.textContent = t; };
       slider.addEventListener('mousemove', e => {
-        const r = slider.getBoundingClientRect(), ratio = Math.min(1, Math.max(0,(e.clientX-r.left)/r.width));
-        const i = Math.round(ratio * (+slider.max || 0)); updateTitle(i);
+        const r = slider.getBoundingClientRect();
+        const ratio = Math.min(1, Math.max(0,(e.clientX - r.left)/r.width));
+        const i = Math.round(ratio * (+slider.max || 0));
+        updateTitle(i);
       });
       slider.addEventListener('mouseleave', ()=> updateTitle(+slider.value || 0));
     }
   }
-  function setNormalizeUI(canvasId, maxBaseIdx, currBaseIdx, labelAt){
+
+  // Update slider UI for current window: max = L.length - n; value = startAbs; label = L[startAbs]
+  function setWindowUI(canvasId, totalMonths, n, startAbs, lookupLabel){
     const slider = document.getElementById(`${canvasId}-base-slider`);
     const label  = document.getElementById(`${canvasId}-base-label`);
     if (!slider || !label) return;
-    slider.max   = Math.max(0, maxBaseIdx|0);
-    slider.value = Math.min(currBaseIdx|0, +slider.max);
-    const txt = labelAt(slider.value) || '—';
+    const maxStart = Math.max(0, totalMonths - n);
+    slider.max   = maxStart;
+    slider.value = Math.min(Math.max(0, startAbs|0), maxStart);
+    const txt = lookupLabel(slider.value) || '—';
     label.textContent = txt; slider.title = txt;
   }
 
-  // label lookup for slider hover text
-  function setLabelLookup(id, labels){
+  // Label lookup for slider hover text (using FULL labels)
+  function setFullLabelLookup(id, fullLabels){
     global.EconCharts = global.EconCharts || {};
-    (global.EconCharts._labelLookup ||= {})[id] = labels;
+    (global.EconCharts._fullLabelLookup ||= {})[id] = fullLabels || [];
   }
-  function labelAt(canvasId, idx){
-    const L = global.EconCharts?._labelLookup?.[canvasId] || [];
+  function fullLabelAt(canvasId, idx){
+    const L = global.EconCharts?._fullLabelLookup?.[canvasId] || [];
     return L[idx] || '—';
   }
 
-  // Snapshot visible datasets BEFORE rebuild: look at meta.hidden
-  function snapshotActiveKeys(chart){
-    const set = new Set();
-    (chart.data.datasets || []).forEach((d, i) => {
-      if (!d || !d._key) return;
-      const hidden = chart.getDatasetMeta(i)?.hidden === true;
-      if (!hidden) set.add(d._key);
-    });
-    return set;
-  }
-
-  // ------------------ CPI (total + forecast + sub overlays) ------------------
+  // ------------------ CPI (total + forecast + sub overlays) -------------
   function initCPIChart(canvasId, { fullLabels, fullValues, futLabels, futValues, subMeta, subSeries, initialRange='2y' }){
-    const L  = fullLabels || [];
-    const V  = fullValues || [];
-    const FL = futLabels   || [];
-    const FV = futValues   || [];
-    const meta = subMeta   || [];
-    const subs = subSeries || {};
+    const FULL = fullLabels || [];
+    const VALL = fullValues || [];
+    const FL   = futLabels  || [];
+    const FV   = futValues  || [];
+    const meta = subMeta    || [];
+    const subs = subSeries  || {};
 
     const ctx = getCtx(canvasId); if (!ctx || typeof Chart === 'undefined') return null;
+    setFullLabelLookup(canvasId, FULL);
 
     const chart = new Chart(ctx, {
       type: 'line',
@@ -170,36 +175,30 @@
       plugins: [hoverYearMarker]
     });
 
+    // Window state: range selects length; slider selects start index in FULL;
     chart.$state = {
       rangeKey: initialRange,
+      startAbs: Math.max(0, FULL.length - monthsForRange(initialRange, FULL.length)),
       norm: false,
-      baseIdx: 0,
       activeKeys: new Set(['total','forecast'])
     };
 
-    function rebuild(reason){
-      // preserve current visible keys unless first init
-      if (reason !== 'init') {
-        const prev = snapshotActiveKeys(chart);
-        if (prev.size) chart.$state.activeKeys = prev;
-      }
-
+    function rebuild(){
       const stt = chart.$state;
 
-      const totalMonths = L.length;
+      const totalMonths = FULL.length;
       const n  = monthsForRange(stt.rangeKey, totalMonths);
-      const st = Math.max(0, totalMonths - n);
-      const lab = L.slice(st).concat(FL);
-      setLabelLookup(canvasId, lab);
+      // clamp start so that we always have n months in the window
+      stt.startAbs = Math.min(Math.max(0, stt.startAbs|0), Math.max(0, totalMonths - n));
 
-      if ((reason === 'range' || reason === 'toggle') && stt.norm) stt.baseIdx = 0;
+      const st = stt.startAbs;
+      const L  = FULL.slice(st, st + n);       // visible actual labels
+      const lab = L.concat(FL);                // + forecast labels
+      const actualSlice = VALL.slice(st, st + n);
 
-      const maxBase = Math.max(0, lab.length - FL.length - 1);
-      if (stt.baseIdx > maxBase) stt.baseIdx = maxBase;
-
-      const actualSlice  = V.slice(st);
+      // Total (actual + forecast), base at index 0 of the visible window
       const combinedTot  = actualSlice.concat(FV);
-      const normalizedTot= stt.norm ? normalizeToBase(combinedTot, stt.baseIdx) : combinedTot;
+      const normalizedTot= stt.norm ? normalizeStrict(combinedTot, 0) : combinedTot;
 
       const actualPlot   = normalizedTot.slice(0, actualSlice.length);
       const forecastPlot = normalizedTot.slice(actualSlice.length);
@@ -209,29 +208,33 @@
         _key:'total',
         label:'VNV vísitala',
         data: actualPlot.concat(Array(FL.length).fill(null)),
-        borderWidth:2, tension:.2, pointRadius:2, pointHoverRadius:4,
+        borderWidth: 2, tension: 0, spanGaps: false,
+        pointRadius: 2, pointHoverRadius: 4,
         hidden: !stt.activeKeys.has('total')
       });
       ds.push({
         _key:'forecast',
         label:'Spáð þróun',
         data: Array(actualPlot.length).fill(null).concat(forecastPlot),
-        borderDash:[6,4], borderWidth:2, tension:.2, pointRadius:2, pointHoverRadius:4, pointHitRadius:6,
+        borderDash:[6,4], borderWidth:2, tension:0, spanGaps:false,
+        pointRadius:2, pointHoverRadius:4, pointHitRadius:6,
         hidden: !stt.activeKeys.has('forecast')
       });
 
-      const fullLen = L.length;
+      // Sub-series over the same window; flexible normalization from start (0)
+      const fullLen = FULL.length;
       meta.forEach(m=>{
         const raw = subs[m.code] || [];
         const padded  = raw.length < fullLen ? Array(fullLen - raw.length).fill(null).concat(raw) : raw;
-        const visible = padded.slice(st, st + actualSlice.length);
+        const visible = padded.slice(st, st + n); // align with visible window
         const combined= visible.concat(Array(FL.length).fill(null));
-        const plot    = stt.norm ? normalizeToBase(combined, stt.baseIdx) : combined;
+        const plot    = stt.norm ? normalizeFromIndex(combined, 0) : combined;
         ds.push({
           _key:`sub:${m.code}`,
           label: m.label,
           data: plot,
-          borderWidth:2, tension:.2, pointRadius:0,
+          borderWidth: 2, tension: 0, spanGaps: false,
+          pointRadius: 0,
           hidden: !stt.activeKeys.has(`sub:${m.code}`)
         });
       });
@@ -239,45 +242,52 @@
       chart.data.labels   = lab;
       chart.data.datasets = ds;
 
-      chart.options.plugins.tooltip = makeTooltipConfig(lab, (lbl, dsIdx) => {
+      chart.options.plugins.tooltip = makeTooltipConfig(lab, (_lbl, dsIdx) => {
         const d = chart.data.datasets[dsIdx];
         if (!d) return null;
         if (d._key === 'total' || d._key === 'forecast') return normalizedTot;
-        return d.data; // sub
+        return d.data;
       });
 
-      applyVisibility(chart);
-      setNormalizeUI(canvasId, maxBase, stt.baseIdx, i => lab[i] || '—');
+      // Slider shows FULL label at the window start
+      setWindowUI(canvasId, totalMonths, n, stt.startAbs, i => fullLabelAt(canvasId, i));
       chart.update();
     }
 
-    hookRangeButtons(canvasId, key => { chart.$state.rangeKey = key; rebuild('range'); }, initialRange);
-    attachNormalizeControls(
-      canvasId,
-      on => { chart.$state.norm = on; rebuild('toggle'); },
-      i  => { chart.$state.baseIdx = i; rebuild('slider'); },
-      i  => labelAt(canvasId, i)
-    );
+    // Range buttons: set length and snap start to the latest n months (like before)
+    hookRangeButtons(canvasId, key => {
+      chart.$state.rangeKey = key;
+      const n = monthsForRange(key, FULL.length);
+      chart.$state.startAbs = Math.max(0, FULL.length - n);
+      rebuild();
+    }, initialRange);
 
-    rebuild('init');
+    // Slider now moves the window start (same semantics as range buttons)
+    attachControls(canvasId, {
+      onToggle: on => { chart.$state.norm = on; rebuild(); },
+      onStartChange: i => { chart.$state.startAbs = i; rebuild(); },
+      onHoverPreview: i => fullLabelAt(canvasId, i)
+    });
 
-    // Debug handle
+    rebuild();
+
     global.EconCharts = global.EconCharts || {};
-    (global.EconCharts.DEBUG ||= {})[canvasId] = { kind:'cpi', chart, state: chart.$state, meta, subs };
+    (global.EconCharts.DEBUG ||= {})[canvasId] = { kind:'cpi', chart, state: chart.$state, meta, subs, FULL };
     return chart;
   }
 
-  // -------- Generic chart (Wages / BCI / PPI), supports optional sub overlays --------
+  // -------- Generic chart (Wages / BCI / PPI), with optional sub overlays
   function initLineForecastChart(canvasId, params){
-    const L   = params.fullLabels || params.labels || [];
-    const V   = params.fullValues || params.values || [];
-    const FL  = params.futLabels  || [];
-    const FV  = params.futValues  || [];
-    const meta= params.subMeta    || [];
-    const subs= params.subSeries  || {};
+    const FULL = params.fullLabels || params.labels || [];
+    const VALL = params.fullValues || params.values || [];
+    const FL   = params.futLabels  || [];
+    const FV   = params.futValues  || [];
+    const meta = params.subMeta    || [];
+    const subs = params.subSeries  || {};
     const initialRange = params.initialRange || '2y';
 
     const ctx = getCtx(canvasId); if (!ctx || typeof Chart === 'undefined') return null;
+    setFullLabelLookup(canvasId, FULL);
 
     const chart = new Chart(ctx, {
       type: 'line',
@@ -296,64 +306,61 @@
 
     chart.$state = {
       rangeKey: initialRange,
+      startAbs: Math.max(0, FULL.length - monthsForRange(initialRange, FULL.length)),
       norm: false,
-      baseIdx: 0,
       activeKeys: new Set(['main','forecast'])
     };
 
-    function rebuild(reason){
-      if (reason !== 'init') {
-        const prev = snapshotActiveKeys(chart);
-        if (prev.size) chart.$state.activeKeys = prev;
-      }
-
+    function rebuild(){
       const stt = chart.$state;
 
-      const total = L.length;
+      const total = FULL.length;
       const n  = monthsForRange(stt.rangeKey, total);
-      const st = Math.max(0, total - n);
-      const lab= L.slice(st).concat(FL);
+      stt.startAbs = Math.min(Math.max(0, stt.startAbs|0), Math.max(0, total - n));
 
-      if ((reason === 'range' || reason === 'toggle') && stt.norm) stt.baseIdx = 0;
+      const st = stt.startAbs;
+      const L  = FULL.slice(st, st + n);
+      const lab= L.concat(FL);
+      const actualSlice = VALL.slice(st, st + n);
 
-      const maxBase = Math.max(0, lab.length - FL.length - 1);
-      if (stt.baseIdx > maxBase) stt.baseIdx = maxBase;
+      const combinedMain   = actualSlice.concat(FV);
+      const normalizedMain = stt.norm ? normalizeStrict(combinedMain, 0) : combinedMain;
 
-      const actualSlice   = V.slice(st);
-      const combinedMain  = actualSlice.concat(FV);
-      const normalizedMain= stt.norm ? normalizeToBase(combinedMain, stt.baseIdx) : combinedMain;
-
-      const actualPlot    = normalizedMain.slice(0, actualSlice.length);
-      const forecastPlot  = normalizedMain.slice(actualSlice.length);
+      const actualPlot   = normalizedMain.slice(0, actualSlice.length);
+      const forecastPlot = normalizedMain.slice(actualSlice.length);
 
       const ds = [];
       ds.push({
         _key:'main',
         label:'Þróun',
         data: actualPlot.concat(Array(FL.length).fill(null)),
-        borderWidth:2, tension:.25, pointRadius:2, pointHoverRadius:4,
+        borderWidth: 2, tension: 0, spanGaps: false,
+        pointRadius: 2, pointHoverRadius: 4,
         hidden: !stt.activeKeys.has('main')
       });
       ds.push({
         _key:'forecast',
         label:'Spá',
         data: Array(actualPlot.length).fill(null).concat(forecastPlot),
-        borderDash:[6,4], borderWidth:2, tension:.25, pointRadius:2, pointHoverRadius:4, pointHitRadius:6,
+        borderDash:[6,4], borderWidth:2, tension:0, spanGaps:false,
+        pointRadius:2, pointHoverRadius:4, pointHitRadius:6,
         hidden: !stt.activeKeys.has('forecast')
       });
 
-      const fullLen = L.length;
+      // Optional sub overlays aligned to the same window
+      const fullLen = FULL.length;
       meta.forEach(m=>{
         const raw = subs[m.code] || [];
         const padded  = raw.length < fullLen ? Array(fullLen - raw.length).fill(null).concat(raw) : raw;
-        const visible = padded.slice(st, st + actualSlice.length);
+        const visible = padded.slice(st, st + n);
         const combined= visible.concat(Array(FL.length).fill(null));
-        const plot    = stt.norm ? normalizeToBase(combined, stt.baseIdx) : combined;
+        const plot    = stt.norm ? normalizeFromIndex(combined, 0) : combined;
         ds.push({
           _key:`sub:${m.code}`,
           label: m.label,
           data: plot,
-          borderWidth:2, tension:.25, pointRadius:0,
+          borderWidth: 2, tension: 0, spanGaps: false,
+          pointRadius: 0,
           hidden: !stt.activeKeys.has(`sub:${m.code}`)
         });
       });
@@ -361,35 +368,41 @@
       chart.data.labels   = lab;
       chart.data.datasets = ds;
 
-      chart.options.plugins.tooltip = makeTooltipConfig(lab, (lbl, dsIdx) => {
+      chart.options.plugins.tooltip = makeTooltipConfig(lab, (_lbl, dsIdx) => {
         const d = chart.data.datasets[dsIdx];
         if (!d) return null;
         if (d._key === 'main' || d._key === 'forecast') return normalizedMain;
         return d.data;
       });
 
-      applyVisibility(chart);
-      setLabelLookup(canvasId, lab);
+      setWindowUI(canvasId, total, n, stt.startAbs, i => fullLabelAt(canvasId, i));
       chart.update();
     }
 
-    hookRangeButtons(canvasId, key => { chart.$state.rangeKey = key; rebuild('range'); }, initialRange);
-    attachNormalizeControls(
-      canvasId,
-      on => { chart.$state.norm = on; rebuild('toggle'); },
-      i  => { chart.$state.baseIdx = i; rebuild('slider'); },
-      i  => labelAt(canvasId, i)
-    );
+    hookRangeButtons(canvasId, key => {
+      chart.$state.rangeKey = key;
+      const n = monthsForRange(key, FULL.length);
+      chart.$state.startAbs = Math.max(0, FULL.length - n);
+      rebuild();
+    }, initialRange);
 
-    rebuild('init');
+    attachControls(canvasId, {
+      onToggle: on => { chart.$state.norm = on; rebuild(); },
+      onStartChange: i => { chart.$state.startAbs = i; rebuild(); },
+      onHoverPreview: i => fullLabelAt(canvasId, i)
+    });
+
+    rebuild();
 
     global.EconCharts = global.EconCharts || {};
-    (global.EconCharts.DEBUG ||= {})[canvasId] = { kind:'generic', chart, state: chart.$state, meta, subs };
+    (global.EconCharts.DEBUG ||= {})[canvasId] = { kind:'generic', chart, state: chart.$state, meta, subs, FULL };
     return chart;
   }
 
+  // Thin alias
   function initWageChart(canvasId, opts){ return initLineForecastChart(canvasId, opts); }
 
+  // Export
   global.EconCharts = Object.assign({}, global.EconCharts, {
     initCPIChart, initLineForecastChart, initWageChart
   });
