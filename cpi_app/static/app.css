@@ -206,5 +206,8 @@ a.active {
 .range-window input[type="range"].is-end { z-index: 2; }
 .range-window input[type="range"]:not(.is-end) { z-index: 1; }
 
-
 .range-labels { display:flex; justify-content:space-between; font-size:.85rem; color:#9fb0c2; }
+
+.pill-list { list-style:none; margin:.25rem 0 0; padding:0; display:flex; gap:.5rem; flex-wrap:wrap; }
+.pill-list li { background:#0f1317; border:1px solid rgba(255,255,255,.12); border-radius:.5rem; padding:.2rem .5rem; }
+.pos { color:#7be495; } .neg { color:#ff8a8a; }

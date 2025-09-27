@@ -61,6 +61,53 @@
     key==='all'? total : key==='10y'? Math.min(total,120)
     : key==='5y'? Math.min(total,60) : Math.min(total,24);
 
+  function edgeValue(arr, fromStart=true){
+    if (!arr) return null;
+    if (fromStart) { for (let i=0;i<arr.length;i++) if (arr[i] != null) return { idx:i, val:arr[i] }; }
+    else           { for (let i=arr.length-1;i>=0;i--) if (arr[i] != null) return { idx:i, val:arr[i] }; }
+    return null;
+  }
+  function netChangePct(series){
+    const a = edgeValue(series, true);
+    const b = edgeValue(series, false);
+    if (!a || !b || a.idx === b.idx || a.val == null || b.val == null) return null;
+    return (b.val / a.val - 1) * 100;
+  }
+
+  // New: list for ALL visible lines (excludes dashed forecast)
+  function updateNetAllUI(canvasId, chart){
+    const list = document.getElementById(`${canvasId}-net-all`);
+    if (!list) return;
+
+    const items = (chart.data.datasets || []).map((d, i) => {
+      const meta = chart.getDatasetMeta(i);
+      const visible = meta && meta.hidden !== true;
+      if (!d || !visible || d._key === 'forecast') return null;
+
+      // For main/total, use combined (actual+forecast) we stash in state
+      const series = (d._key === 'total' || d._key === 'main')
+        ? (chart.$state?._netCombinedMain || d.data)
+        : d.data;
+
+      return { label: d.label, pct: netChangePct(series) };
+    }).filter(Boolean);
+
+    // Sort by absolute change, biggest first (optional)
+    items.sort((a,b) => {
+      const A = a.pct, B = b.pct;
+      if (A == null && B == null) return 0;
+      if (A == null) return 1;
+      if (B == null) return -1;
+      return Math.abs(B) - Math.abs(A);
+    });
+
+    list.innerHTML = items.map(it => {
+      const cls = it.pct == null ? '' : (it.pct >= 0 ? 'pos' : 'neg');
+      const txt = it.pct == null ? '—' : `${it.pct >= 0 ? '+' : ''}${it.pct.toFixed(2)}%`;
+      return `<li class="${cls}">${it.label}: ${txt}</li>`;
+    }).join('');
+  }
+
   // normalize anchoring the FIRST visible sample to 100 (index 0 of array)
   function normalizeTo100AtZero(arr){
     if (!arr?.length) return arr;
@@ -206,6 +253,13 @@
       chart.data.datasets = ds;
       chart.options.plugins.tooltip = makeTooltipConfig(labels, (dsIdx)=> chart.data.datasets[dsIdx]?.data || null);
 
+      const mainPlotted = chart.data.datasets.find(d => d._key === 'total')?.data || [];
+      const subsPlotted = chart.data.datasets
+        .filter(d => d._key?.startsWith('sub:'))
+        .map(d => ({ label: d.label, series: d.data, visible: !chart.getDatasetMeta(chart.data.datasets.indexOf(d)).hidden }));
+
+      updateNetAllUI(canvasId, chart);
+
       setWindowUI(canvasId, total, S.startAbs, S.endAbs);
       chart.update();
     }
@@ -309,7 +363,13 @@
       chart.data.labels   = labels;
       chart.data.datasets = ds;
       chart.options.plugins.tooltip = makeTooltipConfig(labels, (dsIdx)=> chart.data.datasets[dsIdx]?.data || null);
+      
+      const mainPlotted = chart.data.datasets.find(d => d._key === 'main')?.data || [];
+      const subsPlotted = chart.data.datasets
+        .filter(d => d._key?.startsWith('sub:'))
+        .map(d => ({ label: d.label, series: d.data, visible: !chart.getDatasetMeta(chart.data.datasets.indexOf(d)).hidden }));
 
+      updateNetAllUI(canvasId, chart);
       setWindowUI(canvasId, total, S.startAbs, S.endAbs);
       chart.update();
     }
