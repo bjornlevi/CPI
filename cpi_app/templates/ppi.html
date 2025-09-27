@@ -28,16 +28,17 @@
         <button type="button" data-range="10y">10 ár</button>
         <button type="button" data-range="all">Allt</button>
       </div>
-      <p class="muted small" style="margin:0">
-        Skoða:
-        {% for c in ppi_categories %}
-          {% if not loop.first %} · {% endif %}
-          <a href="{{ url_for('ppi_page', cat=c) }}" class="{{ 'active' if c==ppi_category else '' }}">{{ c }}</a>
-        {% endfor %}
-      </p>
 
+      <div class="norm-controls" data-chart="ppiChart">
+        <label class="checkbox"><input type="checkbox" id="ppiChart-norm-toggle"> Normalisera</label>
+        <input type="range" id="ppiChart-base-slider" min="0" max="0" value="0" step="1" />
+        <small class="muted">Grunnmánuður: <span id="ppiChart-base-label">—</span></small>
+      </div>
+      
       <div class="chart-box chart-box--md">
         <canvas id="ppiChart"></canvas>
+      </div>
+      <div class="rowfoot">
       </div>
     </div>
   </section>
@@ -53,6 +54,8 @@
     fullValues: {{ ppi_full_values|tojson }},
     futLabels:  {{ ppi_fut_labels|tojson }},
     futValues:  {{ ppi_fut_values|tojson }},
+    subMeta:    {{ ppi_sub_meta|tojson }},
+    subSeries:  {{ ppi_sub_series_full|tojson }},
     initialRange: "5y"
   });
 </script>

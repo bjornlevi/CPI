@@ -537,21 +537,36 @@ def _bci_context(requested_cat: str | None):
             .order_by(BCIForecastPoint.date)
         ).all() if best_run_id else []
 
+    # Build overlay sub-series (actuals only) for ALL categories, aligned to full labels
+    with Session(engine) as s2:
+        all_cats = s2.scalars(
+            select(BCIActual.category).distinct().order_by(BCIActual.category)
+        ).all()
+
+        def series_for(cat_code: str):
+            rows = s2.scalars(
+                select(BCIActual).where(BCIActual.category == cat_code).order_by(BCIActual.date)
+            ).all()
+            mp = {r.date.strftime("%Y-%m"): r.index_value for r in rows}
+            return [mp.get(lbl) for lbl in bci_full_labels]
+
+        bci_sub_meta = [{"code": c, "label": c} for c in all_cats]
+        bci_sub_series_full = {c: series_for(c) for c in all_cats}
+
     future     = future[:FORECAST_MONTHS]
     fut_labels = [p.date.strftime("%Y-%m") for p in future]
     fut_values = [p.predicted_index for p in future]
     updated    = bci_full_labels[-1] if bci_full_labels else "N/A"
 
     return dict(
-        # FULL
         bci_full_labels=bci_full_labels, bci_full_values=bci_full_values,
-        # 24m default
         bci_labels=labels, bci_values=values,
-        # forecast
         bci_fut_labels=fut_labels, bci_fut_values=fut_values,
         bci_updated=updated,
         bci_category=cat, bci_categories=cats,
+        bci_sub_meta=bci_sub_meta, bci_sub_series_full=bci_sub_series_full,
     )
+
 
 def _ppi_context(requested_cat: str | None):
     with Session(engine) as s:
@@ -584,6 +599,21 @@ def _ppi_context(requested_cat: str | None):
     labels = full_labels[-24:]
     values = full_values[-24:]
 
+    with Session(engine) as s2:
+        all_cats = s2.scalars(
+            select(PPIActual.category).distinct().order_by(PPIActual.category)
+        ).all()
+
+        def series_for(cat_code: str):
+            rows = s2.scalars(
+                select(PPIActual).where(PPIActual.category == cat_code).order_by(PPIActual.date)
+            ).all()
+            mp = {r.date.strftime("%Y-%m"): r.index_value for r in rows}
+            return [mp.get(lbl) for lbl in full_labels]
+
+        ppi_sub_meta = [{"code": c, "label": c} for c in all_cats]
+        ppi_sub_series_full = {c: series_for(c) for c in all_cats}
+
     future     = future[:FORECAST_MONTHS]
     fut_labels = [p.date.strftime("%Y-%m") for p in future]
     fut_values = [p.predicted_index for p in future]
@@ -595,8 +625,8 @@ def _ppi_context(requested_cat: str | None):
         ppi_fut_labels=fut_labels, ppi_fut_values=fut_values,
         ppi_updated=updated,
         ppi_category=cat, ppi_categories=cats,
+        ppi_sub_meta=ppi_sub_meta, ppi_sub_series_full=ppi_sub_series_full,
     )
-
 
 # -----------------------------------------------------------------------------
 # Flask app / routes

@@ -28,7 +28,13 @@
         <button type="button" data-range="10y">10 ár</button>
         <button type="button" data-range="all">Allt</button>
       </div>
-      
+
+      <div class="norm-controls" data-chart="wageChart">
+        <label class="checkbox"><input type="checkbox" id="wageChart-norm-toggle"> Normalisera</label>
+        <input type="range" id="wageChart-base-slider" min="0" max="0" value="0" step="1" />
+        <small class="muted">Grunnmánuður: <span id="wageChart-base-label">—</span></small>
+      </div>
+
       <p class="muted small" style="margin:0">
         Skoða:
         {% for c in wage_categories %}

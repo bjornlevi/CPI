@@ -31,10 +31,21 @@
         <button type="button" data-range="all">Allt</button>
       </div>
 
+      <div class="norm-controls" data-chart="cpiChart">
+        <label class="checkbox">
+          <input type="checkbox" id="cpiChart-norm-toggle"> Normalisera
+        </label>
+        <input type="range" id="cpiChart-base-slider" min="0" max="0" value="0" step="1" />
+        <small class="muted">
+          Grunnmánuður: <span id="cpiChart-base-label">—</span>
+        </small>
+      </div>
+
       <div class="chart-box chart-box--md">
         <canvas id="cpiChart"></canvas>
       </div>
-
+      <div class="rowfoot">
+      </div>
       <div class="stat-card" style="margin-top:1rem">
         <div class="stat-card__title">Samantekt – VNV</div>
         <table class="stats">

@@ -151,3 +151,9 @@ a.active {
 }
 .range-controls button:hover { border-color: rgba(255,255,255,.28); }
 .range-controls button.is-active { border-color:#8dc1ff; box-shadow: 0 0 0 1px rgba(141,193,255,.35) inset; }
+
+.norm-controls {
+  display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; margin:.25rem 0 .5rem;
+}
+.norm-controls .checkbox { display:flex; align-items:center; gap:.4rem; }
+.norm-controls input[type="range"] { width: 200px; }
