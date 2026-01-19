@@ -71,7 +71,7 @@ class CPI(BaseDataSource):
 
         # Load weight data from the secondary source
         self.weights = {}  # {(date, isnr): weight}
-        weight_source = BaseDataSource(client, 'is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01305.px')
+        weight_source = BaseDataSource(client, 'is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01306.px')
         weight_body = {
             "query": [],
             "response": {
