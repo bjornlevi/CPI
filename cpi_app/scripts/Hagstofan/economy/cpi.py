@@ -51,6 +51,7 @@ class CPI(BaseDataSource):
             if raw_data is None:
                 raise exc
 
+        self.raw_data = raw_data
         self.index = {}  # {(date, isnr): value}
         self.isnr_values = set()
 
