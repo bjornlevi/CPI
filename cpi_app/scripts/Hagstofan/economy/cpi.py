@@ -191,29 +191,35 @@ class CPI(BaseDataSource):
             return None
 
         variables = meta.get("variables", [])
-        liour = None
-        for var in variables:
-            code = var.get("code", "")
-            text = var.get("text", "")
-            if re.search(r"lið|liður|lidur", code, re.IGNORECASE) or re.search(r"lið|liður|lidur", text, re.IGNORECASE):
-                liour = var
-                break
-        if not liour:
-            return None
-
-        values = liour.get("values") or []
-        texts = liour.get("valueTexts") or []
         candidates = []
-        for idx, value in enumerate(values):
-            text = texts[idx] if idx < len(texts) else ""
-            if re.search(r"index", value, re.IGNORECASE) or re.search(r"index|vísitala", text, re.IGNORECASE):
+
+        for var in variables:
+            values = var.get("values") or []
+            for value in values:
                 match = re.search(r"index_B(\d{4})", value, re.IGNORECASE)
-                year = int(match.group(1)) if match else 0
-                candidates.append((year, value))
+                if match:
+                    candidates.append((int(match.group(1)), var.get("code"), value))
+
+        if not candidates:
+            for var in variables:
+                code = var.get("code", "")
+                text = var.get("text", "")
+                if re.search(r"lið|liður|lidur", code, re.IGNORECASE) or re.search(r"lið|liður|lidur", text, re.IGNORECASE):
+                    values = var.get("values") or []
+                    texts = var.get("valueTexts") or []
+                    for idx, value in enumerate(values):
+                        text = texts[idx] if idx < len(texts) else ""
+                        if re.search(r"index", value, re.IGNORECASE) or re.search(r"index|vísitala", text, re.IGNORECASE):
+                            match = re.search(r"index_B(\d{4})", value, re.IGNORECASE)
+                            year = int(match.group(1)) if match else 0
+                            candidates.append((year, var.get("code"), value))
+
         if not candidates:
             return None
+
         candidates.sort()
-        return liour.get("code"), candidates[-1][1]
+        _year, var_code, value = candidates[-1]
+        return var_code, value
 
     def get_average_and_median_change(self, is_nr: str, n_months: int):
         """
