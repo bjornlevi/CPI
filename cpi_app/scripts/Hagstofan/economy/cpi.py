@@ -28,18 +28,28 @@ class CPI(BaseDataSource):
         }
         try:
             raw_data = self.get_data(body)
-        except HTTPError:
+        except HTTPError as exc:
+            raw_data = None
             selector = self._discover_index_selector(client)
-            if not selector:
-                raise
-            discovered_var_code, discovered_value = selector
-            if not discovered_var_code or not discovered_value:
-                raise
-            if discovered_var_code == index_var_code and discovered_value == index_code:
-                raise
-            body["query"][0]["code"] = discovered_var_code
-            body["query"][0]["selection"]["values"] = [discovered_value]
-            raw_data = self.get_data(body)
+            if selector:
+                discovered_var_code, discovered_value = selector
+                if discovered_var_code and discovered_value:
+                    if not (discovered_var_code == index_var_code and discovered_value == index_code):
+                        body["query"][0]["code"] = discovered_var_code
+                        body["query"][0]["selection"]["values"] = [discovered_value]
+                        try:
+                            raw_data = self.get_data(body)
+                        except HTTPError:
+                            raw_data = self._fetch_with_meta_query(client)
+                    else:
+                        raw_data = self._fetch_with_meta_query(client)
+                else:
+                    raw_data = self._fetch_with_meta_query(client)
+            else:
+                raw_data = self._fetch_with_meta_query(client)
+
+            if raw_data is None:
+                raise exc
 
         self.index = {}  # {(date, isnr): value}
         self.isnr_values = set()
@@ -220,6 +230,74 @@ class CPI(BaseDataSource):
         candidates.sort()
         _year, var_code, value = candidates[-1]
         return var_code, value
+
+    def _fetch_with_meta_query(self, client):
+        body = self._build_query_from_meta(client, use_all_wildcard=True)
+        if not body:
+            return None
+        try:
+            return self.get_data(body)
+        except HTTPError:
+            body = self._build_query_from_meta(client, use_all_wildcard=False)
+            if not body:
+                return None
+            return self.get_data(body)
+
+    def _build_query_from_meta(self, client, use_all_wildcard: bool):
+        try:
+            meta = client.get(self.endpoint)
+        except Exception:
+            return None
+
+        variables = meta.get("variables", [])
+        if not variables:
+            return None
+
+        query = []
+        for var in variables:
+            code = var.get("code")
+            values = var.get("values") or []
+            if not code or not values:
+                continue
+
+            selection = self._selection_for_variable(values, use_all_wildcard)
+            query.append({"code": code, "selection": selection})
+
+        if not query:
+            return None
+
+        return {"query": query, "response": {"format": "json"}}
+
+    def _selection_for_variable(self, values, use_all_wildcard: bool):
+        index_value = self._latest_index_value(values)
+        if index_value:
+            return {"filter": "item", "values": [index_value]}
+
+        if any(re.match(r"^IS\d+$", v) for v in values):
+            if use_all_wildcard:
+                return {"filter": "all", "values": ["*"]}
+            return {"filter": "item", "values": values}
+
+        if any(re.match(r"^\d{4}M\d{2}$", v) for v in values):
+            if use_all_wildcard:
+                return {"filter": "all", "values": ["*"]}
+            return {"filter": "item", "values": values}
+
+        if any(str(v).lower() == "index" for v in values):
+            return {"filter": "item", "values": ["index"]}
+
+        return {"filter": "item", "values": [values[0]]}
+
+    def _latest_index_value(self, values):
+        candidates = []
+        for value in values:
+            match = re.search(r"index_B(\d{4})", str(value), re.IGNORECASE)
+            if match:
+                candidates.append((int(match.group(1)), value))
+        if not candidates:
+            return None
+        candidates.sort()
+        return candidates[-1][1]
 
     def get_average_and_median_change(self, is_nr: str, n_months: int):
         """
