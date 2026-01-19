@@ -9,6 +9,7 @@ import pandas as pd
 from dateutil.relativedelta import relativedelta
 from sklearn.linear_model import LinearRegression
 from datetime import datetime
+import re
 
 # --- Import your Hagstofan module (works whether you import as "Hagstofan" or via package path) ---
 from cpi_app.scripts.Hagstofan.api_client import APIClient
@@ -40,9 +41,20 @@ def parse_data(source: "_CPI") -> pd.DataFrame:
         raise TypeError("parse_data() now expects the CPI object returned by fetch_cpi_data().")
 
     # Build a tidy series for IS00 (overall CPI)
+    codes = {code for (_ym, code) in source.index.keys()}
+    total_code = None
+    for candidate in ("IS00", "CP00"):
+        if candidate in codes:
+            total_code = candidate
+            break
+    if total_code is None:
+        total_code = next((c for c in sorted(codes) if re.match(r"^(IS|CP)00$", c)), None)
+    if total_code is None and len(codes) == 1:
+        total_code = next(iter(codes))
+
     rows: List[Tuple[datetime, float]] = []
     for (ym, isnr), val in source.index.items():
-        if isnr == "IS00" and isinstance(val, (int, float)):
+        if isnr == total_code and isinstance(val, (int, float)):
             try:
                 dt = datetime.strptime(ym, "%YM%m")
             except ValueError:

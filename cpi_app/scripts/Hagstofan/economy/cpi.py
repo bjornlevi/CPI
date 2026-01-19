@@ -51,6 +51,9 @@ class CPI(BaseDataSource):
             if raw_data is None:
                 raise exc
 
+        if not raw_data.get("data"):
+            raw_data = self._fetch_with_meta_query(client) or raw_data
+
         self.raw_data = raw_data
         self.index = {}  # {(date, isnr): value}
         self.isnr_values = set()
@@ -60,7 +63,7 @@ class CPI(BaseDataSource):
             if not key:
                 continue
             date_str = next((k for k in key if re.match(r"^\d{4}M\d{2}$", k)), None)
-            isnr_value = next((k for k in key if re.match(r"^IS\d+$", k)), None)
+            isnr_value = next((k for k in key if re.match(r"^(IS|CP)\d+$", k)), None)
             if not date_str or not isnr_value:
                 continue
             try:
@@ -86,7 +89,7 @@ class CPI(BaseDataSource):
             if not key:
                 continue
             date_str = next((k for k in key if re.match(r"^\d{4}M\d{2}$", k)), None)
-            isnr_value = next((k for k in key if re.match(r"^IS\d+$", k)), None)
+            isnr_value = next((k for k in key if re.match(r"^(IS|CP)\d+$", k)), None)
             if not date_str or not isnr_value:
                 continue
             try:
@@ -235,6 +238,13 @@ class CPI(BaseDataSource):
         return var_code, value
 
     def _fetch_with_meta_query(self, client):
+        try:
+            data = self.get_data({"query": [], "response": {"format": "json"}})
+            if data and data.get("data"):
+                return data
+        except HTTPError:
+            pass
+
         body = self._build_query_from_meta(client, use_all_wildcard=True)
         if not body:
             return None

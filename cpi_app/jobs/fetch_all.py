@@ -108,9 +108,14 @@ def upsert_latest_cpi_sub_metrics(session):
     src = fetch_cpi_data()
     all_codes = list_isnr(src)
 
-    # pick: top-level "ISxx" (len==4, not IS00) + your curated set
-    top_level = sorted([c for c in all_codes if c.startswith("IS") and len(c) == 4 and c != "IS00"])
-    target_codes = sorted(set(top_level).union(CPI_CURATED))
+    if any(c.startswith("IS") for c in all_codes):
+        top_level = sorted([c for c in all_codes if c.startswith("IS") and len(c) == 4 and c != "IS00"])
+        curated = [c for c in CPI_CURATED if c in all_codes]
+    else:
+        top_level = sorted([c for c in all_codes if c.startswith("CP") and len(c) == 4 and c != "CP00"])
+        curated = []
+
+    target_codes = sorted(set(top_level).union(curated))
 
     # 3) For each code, get its series, compute value/MoM/YoY for latest month, upsert
     for code in target_codes:

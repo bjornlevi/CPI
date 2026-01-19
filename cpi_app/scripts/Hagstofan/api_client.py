@@ -21,6 +21,11 @@ class APIClient:
             alt = self._alternate_endpoint(endpoint)
             if alt != endpoint:
                 response = requests.get(self._url(alt), headers={"Accept": "application/json"})
+        if response.status_code >= 400:
+            raise requests.HTTPError(
+                f"GET {response.url} failed: {response.status_code} {response.text}",
+                response=response,
+            )
         response.raise_for_status()
         return response.json()
 
@@ -31,5 +36,10 @@ class APIClient:
             alt = self._alternate_endpoint(endpoint)
             if alt != endpoint:
                 response = requests.post(self._url(alt), json=json_body, headers={"Accept": "application/json"})
+        if response.status_code >= 400:
+            raise requests.HTTPError(
+                f"POST {response.url} failed: {response.status_code} {response.text}",
+                response=response,
+            )
         response.raise_for_status()
         return response.json()
