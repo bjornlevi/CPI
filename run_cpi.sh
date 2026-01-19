@@ -5,7 +5,7 @@ set -euo pipefail
 DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 VENV="$DIR/.venv"
 PY="$VENV/bin/python"
-SCRIPT="$DIR/cpi.py"
+SCRIPT="$DIR/cpi_app/jobs/fetch_all.py"
 LOG_DIR="$DIR/logs"
 LOG_FILE="$LOG_DIR/cpi.log"
 LOCK_FILE="/tmp/cpi.lock"
@@ -18,7 +18,7 @@ mkdir -p "$LOG_DIR"
 
 # Run once (no overlap) and log everything
 flock -n "$LOCK_FILE" bash -c "
-  echo \"--- \$(date -Iseconds) starting cpi.py ---\" >> \"$LOG_FILE\"
+  echo \"--- \$(date -Iseconds) starting fetch_all.py ---\" >> \"$LOG_FILE\"
   \"$PY\" \"$SCRIPT\" >> \"$LOG_FILE\" 2>&1
-  echo \"--- \$(date -Iseconds) finished cpi.py ---\" >> \"$LOG_FILE\"
+  echo \"--- \$(date -Iseconds) finished fetch_all.py ---\" >> \"$LOG_FILE\"
 "
