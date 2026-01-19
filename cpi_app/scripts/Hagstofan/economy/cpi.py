@@ -8,7 +8,7 @@ from requests.exceptions import HTTPError
 
 class CPI(BaseDataSource):
     def __init__(self, client):
-        super().__init__(client, 'is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01301.px')
+        super().__init__(client, 'is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01302.px')
 
         index_var_code = "Liður"
         index_code = "index_B1997"
