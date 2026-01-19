@@ -10,11 +10,12 @@ class CPI(BaseDataSource):
     def __init__(self, client):
         super().__init__(client, 'is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01301.px')
 
+        index_var_code = "Liður"
         index_code = "index_B1997"
         body = {
             "query": [
                 {
-                    "code": "Liður",
+                    "code": index_var_code,
                     "selection": {
                         "filter": "item",
                         "values": [index_code]
@@ -28,10 +29,16 @@ class CPI(BaseDataSource):
         try:
             raw_data = self.get_data(body)
         except HTTPError:
-            discovered = self._discover_index_code(client)
-            if not discovered or discovered == index_code:
+            selector = self._discover_index_selector(client)
+            if not selector:
                 raise
-            body["query"][0]["selection"]["values"] = [discovered]
+            discovered_var_code, discovered_value = selector
+            if not discovered_var_code or not discovered_value:
+                raise
+            if discovered_var_code == index_var_code and discovered_value == index_code:
+                raise
+            body["query"][0]["code"] = discovered_var_code
+            body["query"][0]["selection"]["values"] = [discovered_value]
             raw_data = self.get_data(body)
 
         self.index = {}  # {(date, isnr): value}
@@ -177,14 +184,20 @@ class CPI(BaseDataSource):
 
         return result
 
-    def _discover_index_code(self, client):
+    def _discover_index_selector(self, client):
         try:
             meta = client.get(self.endpoint)
         except Exception:
             return None
 
         variables = meta.get("variables", [])
-        liour = next((v for v in variables if v.get("code") == "Liður"), None)
+        liour = None
+        for var in variables:
+            code = var.get("code", "")
+            text = var.get("text", "")
+            if re.search(r"lið|liður|lidur", code, re.IGNORECASE) or re.search(r"lið|liður|lidur", text, re.IGNORECASE):
+                liour = var
+                break
         if not liour:
             return None
 
@@ -200,7 +213,7 @@ class CPI(BaseDataSource):
         if not candidates:
             return None
         candidates.sort()
-        return candidates[-1][1]
+        return liour.get("code"), candidates[-1][1]
 
     def get_average_and_median_change(self, is_nr: str, n_months: int):
         """
