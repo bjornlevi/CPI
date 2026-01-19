@@ -4,28 +4,35 @@ from dateutil.relativedelta import relativedelta
 from .isnr_labels import ISNRLabels
 import re
 import statistics
+from requests.exceptions import HTTPError
 
 class CPI(BaseDataSource):
     def __init__(self, client):
         super().__init__(client, 'is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01301.px')
 
+        index_code = "index_B1997"
         body = {
             "query": [
                 {
-                "code": "Liður",
-                "selection": {
-                    "filter": "item",
-                    "values": [
-                    "index_B1997"
-                    ]
-                }
+                    "code": "Liður",
+                    "selection": {
+                        "filter": "item",
+                        "values": [index_code]
+                    }
                 }
             ],
             "response": {
                 "format": "json"
             }
         }
-        raw_data = self.get_data(body)
+        try:
+            raw_data = self.get_data(body)
+        except HTTPError:
+            discovered = self._discover_index_code(client)
+            if not discovered or discovered == index_code:
+                raise
+            body["query"][0]["selection"]["values"] = [discovered]
+            raw_data = self.get_data(body)
 
         self.index = {}  # {(date, isnr): value}
         self.isnr_values = set()
@@ -169,6 +176,31 @@ class CPI(BaseDataSource):
                 result[isnr] = round(change, 2)
 
         return result
+
+    def _discover_index_code(self, client):
+        try:
+            meta = client.get(self.endpoint)
+        except Exception:
+            return None
+
+        variables = meta.get("variables", [])
+        liour = next((v for v in variables if v.get("code") == "Liður"), None)
+        if not liour:
+            return None
+
+        values = liour.get("values") or []
+        texts = liour.get("valueTexts") or []
+        candidates = []
+        for idx, value in enumerate(values):
+            text = texts[idx] if idx < len(texts) else ""
+            if re.search(r"index", value, re.IGNORECASE) or re.search(r"index|vísitala", text, re.IGNORECASE):
+                match = re.search(r"index_B(\d{4})", value, re.IGNORECASE)
+                year = int(match.group(1)) if match else 0
+                candidates.append((year, value))
+        if not candidates:
+            return None
+        candidates.sort()
+        return candidates[-1][1]
 
     def get_average_and_median_change(self, is_nr: str, n_months: int):
         """
