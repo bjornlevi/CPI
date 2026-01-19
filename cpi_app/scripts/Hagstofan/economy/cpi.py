@@ -65,7 +65,7 @@ class CPI(BaseDataSource):
             if not key:
                 continue
             date_str = next((k for k in key if re.match(r"^\d{4}M\d{2}$", k)), None)
-            isnr_value = next((k for k in key if re.match(r"^(IS|CP)\d+$", k)), None)
+            isnr_value = next((k for k in key if re.match(r"^(IS|CP)\d+$", k) or k == "CPI"), None)
             if not date_str or not isnr_value:
                 continue
             try:
@@ -92,7 +92,7 @@ class CPI(BaseDataSource):
                 if not key:
                     continue
                 date_str = next((k for k in key if re.match(r"^\d{4}M\d{2}$", k)), None)
-                isnr_value = next((k for k in key if re.match(r"^(IS|CP)\d+$", k)), None)
+                isnr_value = next((k for k in key if re.match(r"^(IS|CP)\d+$", k) or k == "CPI"), None)
                 if not date_str or not isnr_value:
                     continue
                 try:

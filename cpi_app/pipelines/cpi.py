@@ -29,6 +29,8 @@ class CPIAdapter:
 
 
 def _select_total_code(codes: set[str]) -> str | None:
+    if "CPI" in codes:
+        return "CPI"
     for candidate in ("IS00", "CP00"):
         if candidate in codes:
             return candidate
@@ -50,18 +52,26 @@ def _merge_cpi_sources(new_src: _CPI, old_src: _CPI) -> CPIAdapter:
     new_series = {ym: val for (ym, code), val in new_index.items() if code == new_total}
     old_series = {ym: val for (ym, code), val in old_index.items() if code == old_total}
     overlap = sorted(set(new_series.keys()).intersection(old_series.keys()))
-    if not overlap:
-        return CPIAdapter(new_index, weights=new_src.weights)
+    anchor = None
+    old_anchor = None
+    new_anchor = None
 
-    anchor = overlap[-1]
-    old_anchor = old_series.get(anchor)
-    new_anchor = new_series.get(anchor)
+    if overlap:
+        anchor = overlap[-1]
+        old_anchor = old_series.get(anchor)
+        new_anchor = new_series.get(anchor)
+    else:
+        if old_series and new_series:
+            old_anchor = old_series.get(max(old_series.keys()))
+            new_anchor = new_series.get(min(new_series.keys()))
+
     if old_anchor in (None, 0) or new_anchor is None:
         return CPIAdapter(new_index, weights=new_src.weights)
 
     scale = new_anchor / old_anchor
+    new_start = min(new_series.keys()) if new_series else None
     for ym, val in old_series.items():
-        if ym >= anchor:
+        if new_start and ym >= new_start:
             continue
         new_index[(ym, new_total)] = float(val) * scale
 
