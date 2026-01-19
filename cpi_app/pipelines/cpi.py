@@ -18,7 +18,57 @@ from cpi_app.scripts.Hagstofan.economy.isnr_labels import ISNRLabels
 
 # ---------- Public API (keeps old function names) ----------
 
-def fetch_cpi_data() -> _CPI:
+class CPIAdapter:
+    def __init__(self, index: dict, weights: dict | None = None):
+        self.index = index
+        self.weights = weights or {}
+        self.isnr_values = {code for (_ym, code) in index.keys()}
+
+    def list_is_nr_values(self) -> list[str]:
+        return sorted(self.isnr_values)
+
+
+def _select_total_code(codes: set[str]) -> str | None:
+    for candidate in ("IS00", "CP00"):
+        if candidate in codes:
+            return candidate
+    return next((c for c in sorted(codes) if re.match(r"^(IS|CP)00$", c)), None)
+
+
+def _merge_cpi_sources(new_src: _CPI, old_src: _CPI) -> CPIAdapter:
+    new_index = dict(new_src.index)
+    old_index = old_src.index
+
+    new_codes = {code for (_ym, code) in new_index.keys()}
+    old_codes = {code for (_ym, code) in old_index.keys()}
+    new_total = _select_total_code(new_codes)
+    old_total = _select_total_code(old_codes)
+
+    if not new_total or not old_total:
+        return CPIAdapter(new_index, weights=new_src.weights)
+
+    new_series = {ym: val for (ym, code), val in new_index.items() if code == new_total}
+    old_series = {ym: val for (ym, code), val in old_index.items() if code == old_total}
+    overlap = sorted(set(new_series.keys()).intersection(old_series.keys()))
+    if not overlap:
+        return CPIAdapter(new_index, weights=new_src.weights)
+
+    anchor = overlap[-1]
+    old_anchor = old_series.get(anchor)
+    new_anchor = new_series.get(anchor)
+    if old_anchor in (None, 0) or new_anchor is None:
+        return CPIAdapter(new_index, weights=new_src.weights)
+
+    scale = new_anchor / old_anchor
+    for ym, val in old_series.items():
+        if ym >= anchor:
+            continue
+        new_index[(ym, new_total)] = float(val) * scale
+
+    return CPIAdapter(new_index, weights=new_src.weights)
+
+
+def fetch_cpi_data() -> CPIAdapter:
     """
     Backwards-compatible replacement for the old 'fetch_cpi_data' that used requests directly.
     Returns a CPI data-source object backed by your Hagstofan module, already loaded with:
@@ -26,7 +76,17 @@ def fetch_cpi_data() -> _CPI:
       - weights (from VIS01305)
     """
     client = APIClient(base_url="https://px.hagstofa.is:443/pxis/api/v1")
-    return _CPI(client)
+    new_src = _CPI(
+        client,
+        endpoint="is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01302.px",
+        weight_endpoint="is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01306.px",
+    )
+    old_src = _CPI(
+        client,
+        endpoint="is/Efnahagur/visitolur/1_vnv/4_eldraefni/VIS01102.px",
+        weight_endpoint=None,
+    )
+    return _merge_cpi_sources(new_src, old_src)
 
 
 def parse_data(source: "_CPI") -> pd.DataFrame:
@@ -37,18 +97,12 @@ def parse_data(source: "_CPI") -> pd.DataFrame:
     and returns a DataFrame with columns: ['date', 'CPI', 'Monthly Change'] where
     CPI is IS00 and 'Monthly Change' is pct change vs previous month.
     """
-    if not isinstance(source, _CPI):
-        raise TypeError("parse_data() now expects the CPI object returned by fetch_cpi_data().")
+    if not hasattr(source, "index"):
+        raise TypeError("parse_data() expects a CPI-like object with an index attribute.")
 
     # Build a tidy series for IS00 (overall CPI)
     codes = {code for (_ym, code) in source.index.keys()}
-    total_code = None
-    for candidate in ("IS00", "CP00"):
-        if candidate in codes:
-            total_code = candidate
-            break
-    if total_code is None:
-        total_code = next((c for c in sorted(codes) if re.match(r"^(IS|CP)00$", c)), None)
+    total_code = _select_total_code(codes)
     if total_code is None and len(codes) == 1:
         total_code = next(iter(codes))
 

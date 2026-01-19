@@ -7,8 +7,10 @@ import statistics
 from requests.exceptions import HTTPError
 
 class CPI(BaseDataSource):
-    def __init__(self, client):
-        super().__init__(client, 'is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01302.px')
+    def __init__(self, client, endpoint: str | None = None, weight_endpoint: str | None = None):
+        endpoint = endpoint or 'is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01302.px'
+        weight_endpoint = weight_endpoint or 'is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01306.px'
+        super().__init__(client, endpoint)
 
         index_var_code = "Liður"
         index_code = "index_B1997"
@@ -76,27 +78,28 @@ class CPI(BaseDataSource):
 
         # Load weight data from the secondary source
         self.weights = {}  # {(date, isnr): weight}
-        weight_source = BaseDataSource(client, 'is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01306.px')
-        weight_body = {
-            "query": [],
-            "response": {
-                "format": "json"
+        if weight_endpoint:
+            weight_source = BaseDataSource(client, weight_endpoint)
+            weight_body = {
+                "query": [],
+                "response": {
+                    "format": "json"
+                }
             }
-        }
-        raw_weights = weight_source.get_data(weight_body)
-        for entry in raw_weights.get("data", []):
-            key = entry.get("key", [])
-            if not key:
-                continue
-            date_str = next((k for k in key if re.match(r"^\d{4}M\d{2}$", k)), None)
-            isnr_value = next((k for k in key if re.match(r"^(IS|CP)\d+$", k)), None)
-            if not date_str or not isnr_value:
-                continue
-            try:
-                value = float(entry["values"][0])
-            except (ValueError, IndexError, TypeError):
-                continue
-            self.weights[(date_str, isnr_value)] = value
+            raw_weights = weight_source.get_data(weight_body)
+            for entry in raw_weights.get("data", []):
+                key = entry.get("key", [])
+                if not key:
+                    continue
+                date_str = next((k for k in key if re.match(r"^\d{4}M\d{2}$", k)), None)
+                isnr_value = next((k for k in key if re.match(r"^(IS|CP)\d+$", k)), None)
+                if not date_str or not isnr_value:
+                    continue
+                try:
+                    value = float(entry["values"][0])
+                except (ValueError, IndexError, TypeError):
+                    continue
+                self.weights[(date_str, isnr_value)] = value
 
     def get_current(self, is_nr: str):
         dates = [d for (d, i) in self.index if i == is_nr]
