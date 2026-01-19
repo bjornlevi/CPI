@@ -55,15 +55,16 @@ class CPI(BaseDataSource):
         self.isnr_values = set()
 
         for entry in raw_data.get("data", []):
-            key = entry["key"]
-            if len(key) < 3:
+            key = entry.get("key", [])
+            if not key:
                 continue
-            date_str, _, isnr_value = key[0], key[1], key[2]
-            if not re.match(r"^IS\d+$", isnr_value):
+            date_str = next((k for k in key if re.match(r"^\d{4}M\d{2}$", k)), None)
+            isnr_value = next((k for k in key if re.match(r"^IS\d+$", k)), None)
+            if not date_str or not isnr_value:
                 continue
             try:
                 value = float(entry["values"][0])
-            except (ValueError, IndexError):
+            except (ValueError, IndexError, TypeError):
                 continue
 
             self.index[(date_str, isnr_value)] = value
@@ -81,14 +82,15 @@ class CPI(BaseDataSource):
         raw_weights = weight_source.get_data(weight_body)
         for entry in raw_weights.get("data", []):
             key = entry.get("key", [])
-            if len(key) < 2:
+            if not key:
                 continue
-            isnr_value, date_str = key[0], key[1]
-            if not re.match(r"^IS\d+$", isnr_value):
+            date_str = next((k for k in key if re.match(r"^\d{4}M\d{2}$", k)), None)
+            isnr_value = next((k for k in key if re.match(r"^IS\d+$", k)), None)
+            if not date_str or not isnr_value:
                 continue
             try:
                 value = float(entry["values"][0])
-            except (ValueError, IndexError):
+            except (ValueError, IndexError, TypeError):
                 continue
             self.weights[(date_str, isnr_value)] = value
 
