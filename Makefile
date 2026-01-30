@@ -5,7 +5,7 @@ PIDFILE=.flask.pid
 HOST=127.0.0.1
 PORT=5000
 
-.PHONY: venv install dev-start dev-stop dev-restart dev-status
+.PHONY: venv install dev-start dev-stop dev-restart dev-status web
 
 venv:
 	python3 -m venv $(VENV)
@@ -49,3 +49,11 @@ dev-status:
 	else \
 	  echo "Not running."; \
 	fi
+
+.PHONY: web
+web: install
+	FLASK_APP=cpi_app.app:create_app FLASK_RUN_HOST=$(HOST) FLASK_RUN_PORT=$(PORT) $(FLASK) run --debug
+
+.PHONY: get_data
+get_data: install
+	$(PY) -m cpi_app.jobs.fetch_all

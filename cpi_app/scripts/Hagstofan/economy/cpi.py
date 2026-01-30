@@ -6,6 +6,7 @@ import re
 import statistics
 from requests.exceptions import HTTPError
 
+
 class CPI(BaseDataSource):
     def __init__(self, client, endpoint: str | None = None, weight_endpoint: str | None = None):
         endpoint = endpoint or 'is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01302.px'
@@ -13,7 +14,7 @@ class CPI(BaseDataSource):
         super().__init__(client, endpoint)
 
         index_var_code = "Liður"
-        index_code = "index_B1997"
+        index_code = "index"
         body = {
             "query": [
                 {
@@ -65,8 +66,11 @@ class CPI(BaseDataSource):
             if not key:
                 continue
             date_str = next((k for k in key if re.match(r"^\d{4}M\d{2}$", k)), None)
-            isnr_value = next((k for k in key if re.match(r"^(IS|CP)\d+$", k) or k == "CPI"), None)
-            if not date_str or not isnr_value:
+            code_value = next((k for k in key if re.match(r"^(IS|CP)\d+$", k) or k == "CPI"), None)
+            if not date_str or not code_value:
+                continue
+            isnr_value = "IS" + code_value[2:] if code_value.startswith("CP") else code_value
+            if not re.match(r"^(IS|CP)\d+$", isnr_value):
                 continue
             try:
                 value = float(entry["values"][0])
@@ -76,12 +80,51 @@ class CPI(BaseDataSource):
             self.index[(date_str, isnr_value)] = value
             self.isnr_values.add(isnr_value)
 
+        # Pull the headline CPI from VIS01000 and rebase to last-but-one month = 100
+        headline_source = BaseDataSource(client, 'is/Efnahagur/visitolur/1_vnv/1_vnv/VIS01000.px')
+        headline_body = {
+            "query": [
+                {"code": "Vísitala", "selection": {"filter": "item", "values": ["CPI"]}},
+                {"code": "Liður", "selection": {"filter": "item", "values": ["index"]}},
+            ],
+            "response": {"format": "json"}
+        }
+        headline_raw = headline_source.get_data(headline_body)
+        headline = []
+        for entry in headline_raw.get("data", []):
+            k = entry.get("key", [])
+            if len(k) < 3:
+                continue
+            date_str = next((k for k in k if re.match(r"^\d{4}M\d{2}$", k)), None) or k[0]
+            try:
+                val = float(entry["values"][0])
+            except (ValueError, IndexError, TypeError):
+                continue
+            headline.append((date_str, val))
+        headline.sort(key=lambda t: t[0])
+        if headline:
+            # Rebase so the previous month (last available minus one) equals 100
+            base_val = headline[-2][1] if len(headline) >= 2 else headline[-1][1]
+            for ym, val in headline:
+                rebased = val / base_val * 100.0 if base_val else val
+                self.index[(ym, "IS00")] = rebased
+            self.isnr_values.add("IS00")
+
         # Load weight data from the secondary source
         self.weights = {}  # {(date, isnr): weight}
         if weight_endpoint:
             weight_source = BaseDataSource(client, weight_endpoint)
             weight_body = {
-                "query": [],
+                "query": [
+                    {
+                        "code": "Undirvísitala",
+                        "selection": {"filter": "all", "values": ["*"]}
+                    },
+                    {
+                        "code": "Tími",
+                        "selection": {"filter": "all", "values": ["*"]}
+                    },
+                ],
                 "response": {
                     "format": "json"
                 }
@@ -89,11 +132,14 @@ class CPI(BaseDataSource):
             raw_weights = weight_source.get_data(weight_body)
             for entry in raw_weights.get("data", []):
                 key = entry.get("key", [])
-                if not key:
+                if len(key) < 2:
                     continue
+                code_value = next((k for k in key if re.match(r"^(IS|CP)\d+$", k) or k == "CPI"), None)
                 date_str = next((k for k in key if re.match(r"^\d{4}M\d{2}$", k)), None)
-                isnr_value = next((k for k in key if re.match(r"^(IS|CP)\d+$", k) or k == "CPI"), None)
-                if not date_str or not isnr_value:
+                if not date_str or not code_value:
+                    continue
+                isnr_value = "IS" + code_value[2:] if code_value.startswith("CP") else code_value
+                if not re.match(r"^(IS|CP)\d+$", isnr_value):
                     continue
                 try:
                     value = float(entry["values"][0])
