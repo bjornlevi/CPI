@@ -9,53 +9,13 @@ from requests.exceptions import HTTPError
 
 class CPI(BaseDataSource):
     def __init__(self, client, endpoint: str | None = None, weight_endpoint: str | None = None):
-        endpoint = endpoint or 'is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01302.px'
-        weight_endpoint = weight_endpoint or 'is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01306.px'
+        endpoint = endpoint or "is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01300.px"
+        weight_endpoint = weight_endpoint or "is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01306.px"
         super().__init__(client, endpoint)
 
-        index_var_code = "Liður"
-        index_code = "index"
-        body = {
-            "query": [
-                {
-                    "code": index_var_code,
-                    "selection": {
-                        "filter": "item",
-                        "values": [index_code]
-                    }
-                }
-            ],
-            "response": {
-                "format": "json"
-            }
-        }
-        try:
-            raw_data = self.get_data(body)
-        except HTTPError as exc:
-            raw_data = None
-            selector = self._discover_index_selector(client)
-            if selector:
-                discovered_var_code, discovered_value = selector
-                if discovered_var_code and discovered_value:
-                    if not (discovered_var_code == index_var_code and discovered_value == index_code):
-                        body["query"][0]["code"] = discovered_var_code
-                        body["query"][0]["selection"]["values"] = [discovered_value]
-                        try:
-                            raw_data = self.get_data(body)
-                        except HTTPError:
-                            raw_data = self._fetch_with_meta_query(client)
-                    else:
-                        raw_data = self._fetch_with_meta_query(client)
-                else:
-                    raw_data = self._fetch_with_meta_query(client)
-            else:
-                raw_data = self._fetch_with_meta_query(client)
-
-            if raw_data is None:
-                raise exc
-
-        if not raw_data.get("data"):
-            raw_data = self._fetch_with_meta_query(client) or raw_data
+        raw_data = self._fetch_with_meta_query(client)
+        if raw_data is None:
+            raise HTTPError(f"Failed to load CPI data from {self.endpoint}")
 
         self.raw_data = raw_data
         self.index = {}  # {(date, isnr): value}
@@ -65,11 +25,11 @@ class CPI(BaseDataSource):
             key = entry.get("key", [])
             if not key:
                 continue
-            date_str = next((k for k in key if re.match(r"^\d{4}M\d{2}$", k)), None)
-            code_value = next((k for k in key if re.match(r"^(IS|CP)\d+$", k) or k == "CPI"), None)
+            date_str = next((k for k in key if re.match(r"^\d{4}M\d{2}$", str(k))), None)
+            code_value = next((k for k in key if re.match(r"^(IS|CP)\d+$", str(k)) or k == "CPI"), None)
             if not date_str or not code_value:
                 continue
-            isnr_value = "IS" + code_value[2:] if code_value.startswith("CP") else code_value
+            isnr_value = "IS" + code_value[2:] if str(code_value).startswith("CP") else str(code_value)
             if not re.match(r"^(IS|CP)\d+$", isnr_value):
                 continue
             try:
@@ -80,65 +40,50 @@ class CPI(BaseDataSource):
             self.index[(date_str, isnr_value)] = value
             self.isnr_values.add(isnr_value)
 
-        # Pull the headline CPI from VIS01000 and rebase to last-but-one month = 100
-        headline_source = BaseDataSource(client, 'is/Efnahagur/visitolur/1_vnv/1_vnv/VIS01000.px')
-        headline_body = {
-            "query": [
-                {"code": "Vísitala", "selection": {"filter": "item", "values": ["CPI"]}},
-                {"code": "Liður", "selection": {"filter": "item", "values": ["index"]}},
-            ],
-            "response": {"format": "json"}
-        }
-        headline_raw = headline_source.get_data(headline_body)
+        # Pull headline CPI and rebase to previous month = 100.
+        headline_raw = self._fetch_from_endpoint(
+            client, "is/Efnahagur/visitolur/1_vnv/1_vnv/VIS01000.px", use_all_wildcard=True
+        )
         headline = []
-        for entry in headline_raw.get("data", []):
-            k = entry.get("key", [])
-            if len(k) < 3:
+        for entry in (headline_raw or {}).get("data", []):
+            key = entry.get("key", [])
+            if len(key) < 2:
                 continue
-            date_str = next((k for k in k if re.match(r"^\d{4}M\d{2}$", k)), None) or k[0]
+            if not any(str(item).lower() == "index" for item in key):
+                continue
+            if not any(item in ("CPI", "CP00", "IS00") for item in key):
+                continue
+
+            date_str = next((k for k in key if re.match(r"^\d{4}M\d{2}$", str(k))), None)
+            if not date_str:
+                continue
             try:
                 val = float(entry["values"][0])
             except (ValueError, IndexError, TypeError):
                 continue
             headline.append((date_str, val))
+
         headline.sort(key=lambda t: t[0])
         if headline:
-            # Rebase so the previous month (last available minus one) equals 100
             base_val = headline[-2][1] if len(headline) >= 2 else headline[-1][1]
             for ym, val in headline:
                 rebased = val / base_val * 100.0 if base_val else val
                 self.index[(ym, "IS00")] = rebased
             self.isnr_values.add("IS00")
 
-        # Load weight data from the secondary source
+        # Load weight data from the secondary source.
         self.weights = {}  # {(date, isnr): weight}
         if weight_endpoint:
-            weight_source = BaseDataSource(client, weight_endpoint)
-            weight_body = {
-                "query": [
-                    {
-                        "code": "Undirvísitala",
-                        "selection": {"filter": "all", "values": ["*"]}
-                    },
-                    {
-                        "code": "Tími",
-                        "selection": {"filter": "all", "values": ["*"]}
-                    },
-                ],
-                "response": {
-                    "format": "json"
-                }
-            }
-            raw_weights = weight_source.get_data(weight_body)
-            for entry in raw_weights.get("data", []):
+            raw_weights = self._fetch_from_endpoint(client, weight_endpoint, use_all_wildcard=True)
+            for entry in (raw_weights or {}).get("data", []):
                 key = entry.get("key", [])
                 if len(key) < 2:
                     continue
-                code_value = next((k for k in key if re.match(r"^(IS|CP)\d+$", k) or k == "CPI"), None)
-                date_str = next((k for k in key if re.match(r"^\d{4}M\d{2}$", k)), None)
+                code_value = next((k for k in key if re.match(r"^(IS|CP)\d+$", str(k)) or k == "CPI"), None)
+                date_str = next((k for k in key if re.match(r"^\d{4}M\d{2}$", str(k))), None)
                 if not date_str or not code_value:
                     continue
-                isnr_value = "IS" + code_value[2:] if code_value.startswith("CP") else code_value
+                isnr_value = "IS" + code_value[2:] if str(code_value).startswith("CP") else str(code_value)
                 if not re.match(r"^(IS|CP)\d+$", isnr_value):
                     continue
                 try:
@@ -178,7 +123,7 @@ class CPI(BaseDataSource):
         return {
             "from": previous_month_str,
             "to": latest_month_str,
-            "change_percent": round(change, 2)
+            "change_percent": round(change, 2),
         }
 
     def get_cpi(self):
@@ -197,34 +142,12 @@ class CPI(BaseDataSource):
         return ISNRLabels.get(is_nr)
 
     def get_weight(self, year_month: str, is_nr: str):
-        """
-        Returns the weight of the given ISNR for the specified year and month.
-
-        Args:
-            year_month (str): The date in format "YYYYMmm", e.g., "2024M01".
-            is_nr (str): The ISNR code, e.g., "IS0112".
-
-        Returns:
-            float: The weight value.
-
-        Raises:
-            ValueError: If no weight data is found for the specified combination.
-        """
         try:
             return self.weights[(year_month, is_nr)]
         except KeyError:
             return None
 
     def get_increase_over_months(self, n_months: int):
-        """
-        Calculates the % increase in CPI value over the past n_months for each ISNR.
-
-        Args:
-            n_months (int): Number of months back to calculate change from.
-
-        Returns:
-            dict: Mapping from ISNR to % change (float), or error message if data is missing.
-        """
         result = {}
         for isnr in self.isnr_values:
             dates = [d for (d, i) in self.index if i == isnr]
@@ -249,65 +172,28 @@ class CPI(BaseDataSource):
 
         return result
 
-    def _discover_index_selector(self, client):
-        try:
-            meta = client.get(self.endpoint)
-        except Exception:
-            return None
-
-        variables = meta.get("variables", [])
-        candidates = []
-
-        for var in variables:
-            values = var.get("values") or []
-            for value in values:
-                match = re.search(r"index_B(\d{4})", value, re.IGNORECASE)
-                if match:
-                    candidates.append((int(match.group(1)), var.get("code"), value))
-
-        if not candidates:
-            for var in variables:
-                code = var.get("code", "")
-                text = var.get("text", "")
-                if re.search(r"lið|liður|lidur", code, re.IGNORECASE) or re.search(r"lið|liður|lidur", text, re.IGNORECASE):
-                    values = var.get("values") or []
-                    texts = var.get("valueTexts") or []
-                    for idx, value in enumerate(values):
-                        text = texts[idx] if idx < len(texts) else ""
-                        if re.search(r"index", value, re.IGNORECASE) or re.search(r"index|vísitala", text, re.IGNORECASE):
-                            match = re.search(r"index_B(\d{4})", value, re.IGNORECASE)
-                            year = int(match.group(1)) if match else 0
-                            candidates.append((year, var.get("code"), value))
-
-        if not candidates:
-            return None
-
-        candidates.sort()
-        _year, var_code, value = candidates[-1]
-        return var_code, value
-
     def _fetch_with_meta_query(self, client):
-        try:
-            data = self.get_data({"query": [], "response": {"format": "json"}})
-            if data and data.get("data"):
-                return data
-        except HTTPError:
-            pass
+        return self._fetch_from_endpoint(client, self.endpoint, use_all_wildcard=True)
 
-        body = self._build_query_from_meta(client, use_all_wildcard=True)
+    def _fetch_from_endpoint(self, client, endpoint: str, use_all_wildcard: bool):
+        body = self._build_query_from_endpoint(client, endpoint, use_all_wildcard)
         if not body:
             return None
         try:
-            return self.get_data(body)
+            return client.post(endpoint, body)
         except HTTPError:
-            body = self._build_query_from_meta(client, use_all_wildcard=False)
-            if not body:
-                return None
-            return self.get_data(body)
+            if use_all_wildcard:
+                fallback = self._build_query_from_endpoint(client, endpoint, use_all_wildcard=False)
+                if fallback:
+                    return client.post(endpoint, fallback)
+            return None
 
     def _build_query_from_meta(self, client, use_all_wildcard: bool):
+        return self._build_query_from_endpoint(client, self.endpoint, use_all_wildcard)
+
+    def _build_query_from_endpoint(self, client, endpoint: str, use_all_wildcard: bool):
         try:
-            meta = client.get(self.endpoint)
+            meta = client.get(endpoint)
         except Exception:
             return None
 
@@ -331,24 +217,27 @@ class CPI(BaseDataSource):
         return {"query": query, "response": {"format": "json"}}
 
     def _selection_for_variable(self, values, use_all_wildcard: bool):
-        index_value = self._latest_index_value(values)
-        if index_value:
-            return {"filter": "item", "values": [index_value]}
-
-        if any(re.match(r"^IS\d+$", v) for v in values):
-            if use_all_wildcard:
-                return {"filter": "all", "values": ["*"]}
-            return {"filter": "item", "values": values}
-
-        if any(re.match(r"^\d{4}M\d{2}$", v) for v in values):
-            if use_all_wildcard:
-                return {"filter": "all", "values": ["*"]}
-            return {"filter": "item", "values": values}
-
         if any(str(v).lower() == "index" for v in values):
-            return {"filter": "item", "values": ["index"]}
+            return {"filter": "item", "values": [next(v for v in values if str(v).lower() == "index")]}
+
+        if any(re.match(r"^(IS|CP)\d+$", str(v)) for v in values):
+            if use_all_wildcard:
+                return {"filter": "all", "values": ["*"]}
+            return {"filter": "item", "values": values}
+
+        if any(self._is_time_value(v) for v in values):
+            if use_all_wildcard:
+                return {"filter": "all", "values": ["*"]}
+            return {"filter": "item", "values": values}
+
+        latest_index = self._latest_index_value(values)
+        if latest_index:
+            return {"filter": "item", "values": [latest_index]}
 
         return {"filter": "item", "values": [values[0]]}
+
+    def _is_time_value(self, value):
+        return bool(re.match(r"^\d{4}M\d{2}$", str(value)))
 
     def _latest_index_value(self, values):
         candidates = []
@@ -362,16 +251,6 @@ class CPI(BaseDataSource):
         return candidates[-1][1]
 
     def get_average_and_median_change(self, is_nr: str, n_months: int):
-        """
-        Computes average and median monthly % change for a given ISNR over the past n_months.
-
-        Args:
-            is_nr (str): The ISNR code to compute stats for.
-            n_months (int): Number of recent months to include.
-
-        Returns:
-            dict: {"average": float, "median": float} or {"error": str}
-        """
         dates = sorted([d for (d, i) in self.index if i == is_nr], reverse=True)
         if len(dates) < n_months + 1:
             return {"error": f"Not enough data for ISNR '{is_nr}'"}
@@ -390,7 +269,7 @@ class CPI(BaseDataSource):
 
         return {
             "average": round(statistics.mean(percent_changes), 2),
-            "median": round(statistics.median(percent_changes), 2)
+            "median": round(statistics.median(percent_changes), 2),
         }
 
     def __str__(self):

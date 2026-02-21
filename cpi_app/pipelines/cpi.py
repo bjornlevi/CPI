@@ -88,7 +88,7 @@ def fetch_cpi_data() -> CPIAdapter:
     client = APIClient(base_url="https://px.hagstofa.is:443/pxis/api/v1")
     new_src = _CPI(
         client,
-        endpoint="is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01302.px",
+        endpoint="is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01300.px",
         weight_endpoint="is/Efnahagur/visitolur/1_vnv/2_undirvisitolur/VIS01306.px",
     )
     old_src = _CPI(
