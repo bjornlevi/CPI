@@ -1,6 +1,7 @@
 import os
 from statistics import mean, median, stdev
 from typing import Optional, Tuple, List, Dict, Any
+import pandas as pd
 
 from flask import Flask, render_template, request
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -24,6 +25,7 @@ from .pipelines.cpi import (
     fetch_cpi_data,   # fetches Hagstofan CPI source
     isnr_label,       # pretty label for ISNR code
     get_isnr_series,  # returns DataFrame with columns: date, value, (maybe Monthly Change)
+    compute_trend as cpi_trend,
 )
 
 # -----------------------------------------------------------------------------
@@ -195,6 +197,26 @@ def _cpi_context() -> dict:
     cpi_future = cpi_future[:FORECAST_MONTHS]
     fut_labels = [p.date.strftime("%Y-%m") for p in cpi_future]
     fut_values = [p.predicted_cpi for p in cpi_future]
+    fut_values_12 = []
+
+    # Secondary CPI projection: fit on last 12 months, align to the same future labels.
+    if len(full_values) >= 2:
+        horizon = len(fut_labels) if fut_labels else FORECAST_MONTHS
+        hist_df = pd.DataFrame(
+            {
+                "date": [a.date for a in cpi_actuals],
+                "CPI": full_values,
+            }
+        )
+        _model_12, future_12 = cpi_trend(
+            hist_df.tail(min(12, len(hist_df))).reset_index(drop=True),
+            months_predict=horizon,
+        )
+        future_12_map = {d.strftime("%Y-%m"): float(v) for d, v in future_12}
+        if fut_labels:
+            fut_values_12 = [future_12_map.get(lbl) for lbl in fut_labels]
+        else:
+            fut_values_12 = [float(v) for _d, v in future_12]
 
     updated = full_labels[-1] if full_labels else "N/A"
     cpi_table = _structured_change_table(values_24, fut_values, len(labels_24), len(fut_labels))
@@ -284,6 +306,7 @@ def _cpi_context() -> dict:
         full_labels=full_labels, full_values=full_values,
         # forecast
         fut_labels=fut_labels, fut_values=fut_values,
+        fut_values_12=fut_values_12,
         updated=updated,
         # sub-series (FULL history aligned to full_labels)
         cpi_sub_meta=cpi_sub_meta,

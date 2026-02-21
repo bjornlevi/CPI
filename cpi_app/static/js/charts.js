@@ -43,13 +43,19 @@
         label: ctx => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`,
         afterBody(items){
           if (!items?.length) return [];
-          const idx = items[0].dataIndex, s = seriesFor(items[0].datasetIndex);
+          const item = items[0];
+          const ds = item.dataset || {};
+          const idx = item.dataIndex;
+          const s = ds._tooltipSeries || seriesFor(item.datasetIndex);
           if (!s) return [];
           const curr = s[idx], prev = idx>0 ? s[idx-1] : null;
           const lines = [];
-          const m = pct(curr, prev); if (m!=null) lines.push(`Mánaðarbreyting: ${m.toFixed(2)}%`);
+          const isForecast = String(ds._key || '').startsWith('forecast');
+          const m = pct(curr, prev);
+          if (m!=null) lines.push(`${isForecast ? 'Spáð mánaðarbreyting' : 'Mánaðarbreyting'}: ${m.toFixed(2)}%`);
           const j = idx-12, prev12 = j>=0 ? s[j] : null;
-          const y = pct(curr, prev12); if (y!=null) lines.push(`Ársbreyting: ${y.toFixed(2)}% (vs ${labels[j]})`);
+          const y = pct(curr, prev12);
+          if (y!=null) lines.push(`${isForecast ? 'Spáð ársbreyting' : 'Ársbreyting'}: ${y.toFixed(2)}% (vs ${labels[j]})`);
           return lines;
         }
       }
@@ -82,7 +88,7 @@
     const items = (chart.data.datasets || []).map((d, i) => {
       const meta = chart.getDatasetMeta(i);
       const visible = meta && meta.hidden !== true;
-      if (!d || !visible || d._key === 'forecast') return null;
+      if (!d || !visible || String(d._key || '').startsWith('forecast')) return null;
 
       // For main/total, use combined (actual+forecast) we stash in state
       const series = (d._key === 'total' || d._key === 'main')
@@ -166,11 +172,12 @@
   }
 
   // ---------------- CPI ----------------
-  function initCPIChart(canvasId, { fullLabels, fullValues, futLabels, futValues, subMeta, subSeries, initialRange='2y' }){
+  function initCPIChart(canvasId, { fullLabels, fullValues, futLabels, futValues, futValues12, subMeta, subSeries, initialRange='2y' }){
     const FULL = fullLabels || [];
     const VALL = fullValues || [];
     const FL   = futLabels  || [];
     const FV   = futValues  || [];
+    const FV12 = futValues12 || [];
     const meta = subMeta    || [];
     const subs = subSeries  || {};
 
@@ -196,7 +203,7 @@
       startAbs: Math.max(0, FULL.length - initialN), // left handle
       endAbs:   FULL.length,                          // right handle (latest)
       norm: false,
-      activeKeys: new Set(['total','forecast'])
+      activeKeys: new Set(['total','forecast','forecast12'])
     };
 
     function rebuild(){
@@ -213,26 +220,42 @@
 
       // TOTAL
       const actual = VALL.slice(S.startAbs, S.endAbs);
-      const combo  = atEnd ? actual.concat(FV) : actual;
-      const normed = S.norm ? normalizeTo100AtZero(combo) : combo;
+      const combo24 = atEnd ? actual.concat(FV) : actual;
+      const combo12 = atEnd ? actual.concat(FV12) : actual;
+      const normed24 = S.norm ? normalizeTo100AtZero(combo24) : combo24;
+      const normed12 = S.norm ? normalizeTo100AtZero(combo12) : combo12;
 
-      const actualPlot   = normed.slice(0, actual.length);
-      const forecastPlot = atEnd ? normed.slice(actual.length) : [];
+      const actualPlot = normed24.slice(0, actual.length);
+      const forecastPlot = atEnd ? normed24.slice(actual.length) : [];
+      const forecastPlot12 = atEnd ? normed12.slice(actual.length) : [];
+      const tooltipSeries = actualPlot.concat(forecastPlot);
 
       const ds = [];
       ds.push({
         _key:'total', label:'VNV vísitala',
         data: actualPlot.concat(atEnd ? Array(FL.length).fill(null) : []),
+        _tooltipSeries: tooltipSeries,
         borderWidth:2, tension:0, spanGaps:false, pointRadius:2, pointHoverRadius:4,
         hidden: !S.activeKeys.has('total')
       });
       ds.push({
-        _key:'forecast', label:'Spáð þróun',
+        _key:'forecast', label:'Spáð þróun (24m)',
         data: atEnd ? Array(actualPlot.length).fill(null).concat(forecastPlot)
                     : Array(labels.length).fill(null),
+        _tooltipSeries: tooltipSeries,
         borderDash:[6,4], borderWidth:2, tension:0, spanGaps:false, pointRadius:2, pointHoverRadius:4, pointHitRadius:6,
         hidden: !S.activeKeys.has('forecast')
       });
+      if (FV12.length) {
+        ds.push({
+          _key:'forecast12', label:'Spáð þróun (12m)',
+          data: atEnd ? Array(actualPlot.length).fill(null).concat(forecastPlot12)
+                      : Array(labels.length).fill(null),
+          _tooltipSeries: actualPlot.concat(forecastPlot12),
+          borderDash:[2,4], borderWidth:2, tension:0, spanGaps:false, pointRadius:2, pointHoverRadius:4, pointHitRadius:6,
+          hidden: !S.activeKeys.has('forecast12')
+        });
+      }
 
       // SUBS (aligned to FULL)
       const fullLen = FULL.length;
@@ -244,6 +267,7 @@
         const plot     = S.norm ? normalizeTo100AtZero(combined) : combined;
         ds.push({
           _key:`sub:${m.code}`, label:m.label, data:plot,
+          _tooltipSeries: plot,
           borderWidth:2, tension:0, spanGaps:false, pointRadius:0,
           hidden: !S.activeKeys.has(`sub:${m.code}`)
         });
@@ -329,11 +353,13 @@
 
       const actualPlot   = normed.slice(0, actual.length);
       const forecastPlot = atEnd ? normed.slice(actual.length) : [];
+      const tooltipSeries = actualPlot.concat(forecastPlot);
 
       const ds = [];
       ds.push({
         _key:'main', label:'Þróun',
         data: actualPlot.concat(atEnd ? Array(FL.length).fill(null) : []),
+        _tooltipSeries: tooltipSeries,
         borderWidth:2, tension:0, spanGaps:false, pointRadius:2, pointHoverRadius:4,
         hidden: !S.activeKeys.has('main')
       });
@@ -341,6 +367,7 @@
         _key:'forecast', label:'Spá',
         data: atEnd ? Array(actualPlot.length).fill(null).concat(forecastPlot)
                     : Array(labels.length).fill(null),
+        _tooltipSeries: tooltipSeries,
         borderDash:[6,4], borderWidth:2, tension:0, spanGaps:false, pointRadius:2, pointHoverRadius:4, pointHitRadius:6,
         hidden: !S.activeKeys.has('forecast')
       });
@@ -355,6 +382,7 @@
         const plot     = S.norm ? normalizeTo100AtZero(combined) : combined;
         ds.push({
           _key:`sub:${m.code}`, label:m.label, data:plot,
+          _tooltipSeries: plot,
           borderWidth:2, tension:0, spanGaps:false, pointRadius:0,
           hidden: !S.activeKeys.has(`sub:${m.code}`)
         });
