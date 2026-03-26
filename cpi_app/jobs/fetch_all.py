@@ -223,47 +223,65 @@ def save_ppi_forecast(s, df, months=6):
 
 # ---------- main ----------
 
+def _run_pipeline(name, fn):
+    """Run a pipeline function, print a warning on failure instead of aborting."""
+    try:
+        fn()
+        print(f"✅ {name}")
+    except Exception as exc:
+        print(f"⚠️  {name} failed: {exc}")
+
+
 def main():
     # create tables if needed
     Base.metadata.create_all(engine)
 
-    s = SessionLocal()
-    try:
-        # --- CPI ---
-        cpi_src = fetch_cpi_data()
-        cpi_df  = parse_cpi(cpi_src)
-        upsert_cpi(s, cpi_df)
-        save_cpi_forecast(s, cpi_df.tail(24).reset_index(drop=True), months=6)
+    # --- CPI (committed independently so other failures can't roll it back) ---
+    with SessionLocal() as s:
+        try:
+            cpi_src = fetch_cpi_data()
+            cpi_df  = parse_cpi(cpi_src)
+            upsert_cpi(s, cpi_df)
+            save_cpi_forecast(s, cpi_df.tail(24).reset_index(drop=True), months=6)
+            s.commit()
+            print("✅ CPI")
+        except Exception:
+            s.rollback()
+            raise
 
-        # --- Wages (multiple categories) ---
-        cats = ["TOTAL", "ALM"]  # add "OPI", "OPI_R", "OPI_L" if you want
+    # --- remaining pipelines (failures are logged but don't affect CPI) ---
+    def do_wages():
+        cats = ["TOTAL", "ALM"]
         frames = [make_wage_df_for_category(c) for c in cats]
         w_df = pd.concat([f for f in frames if not f.empty], ignore_index=True)
+        with SessionLocal() as s:
+            upsert_wages(s, w_df)
+            save_wage_forecast(s, w_df, months=12)
+            s.commit()
 
-        upsert_wages(s, w_df)
-        save_wage_forecast(s, w_df, months=12)
+    def do_sub_metrics():
+        with SessionLocal() as s:
+            upsert_latest_cpi_sub_metrics(s)
+            s.commit()
 
-        # --- Sub-CPI metrics for latest month (fast) ---
-        upsert_latest_cpi_sub_metrics(s)
+    def do_bci():
+        bci_df = fetch_bci(categories=["BCI"])
+        with SessionLocal() as s:
+            upsert_bci(s, bci_df)
+            save_bci_forecast(s, bci_df, months=6)
+            s.commit()
 
-        # --- BCI ---
-        bci_df = fetch_bci(categories=["BCI"])  # add more cats later if desired
-        upsert_bci(s, bci_df)
-        save_bci_forecast(s, bci_df, months=6)
-
-        # --- PPI ---
+    def do_ppi():
         ppi_df = fetch_ppi(categories=["PPI"])
-        upsert_ppi(s, ppi_df)
-        save_ppi_forecast(s, ppi_df, months=6)
+        with SessionLocal() as s:
+            upsert_ppi(s, ppi_df)
+            save_ppi_forecast(s, ppi_df, months=6)
+            s.commit()
 
-        s.commit()
-        print("✅ Stored CPI + wages (TOTAL) + PPI + BCI + forecasts")
-
-    except Exception:
-        s.rollback()
-        raise
-    finally:
-        s.close()
+    _run_pipeline("Wages", do_wages)
+    _run_pipeline("Sub-CPI metrics", do_sub_metrics)
+    _run_pipeline("BCI", do_bci)
+    _run_pipeline("PPI", do_ppi)
 
 if __name__ == "__main__":
     main()
