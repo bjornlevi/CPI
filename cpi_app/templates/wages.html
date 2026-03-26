@@ -21,7 +21,8 @@
         <li><a href="{{ url_for('cpi_page') }}">VNV</a></li>
         <li><a href="{{ url_for('wages_page') }}" aria-current="page">Laun</a></li>
         <li><a href="{{ url_for('bci_page') }}">BCI</a></li>
-        <li><a href="{{ url_for('ppi_page') }}">PPI</a></li>
+        <li><a href="{{ url_for('ppi_page') }}"{% if request.endpoint == 'ppi_page' %} aria-current="page"{% endif %}>PPI</a></li>
+        <li><a href="{{ url_for('sub_page') }}"{% if request.endpoint == 'sub_page' %} aria-current="page"{% endif %}>Undirliðir</a></li>
       </ul>
     </nav>
   </div>

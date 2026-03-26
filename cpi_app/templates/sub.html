@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="is">
+<head>
+  <meta charset="utf-8">
+  <title>Undirliðir VNV – {{ site_name }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v=18">
+</head>
+<body>
+
+<a class="skip-link" href="#main-content">Fara beint í efni</a>
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <p class="brand"><a href="{{ url_for('index') }}">{{ site_name }}</a></p>
+    <nav aria-label="Aðalvalmynd">
+      <ul class="site-nav">
+        <li><a href="{{ url_for('index') }}">Heim</a></li>
+        <li><a href="{{ url_for('cpi_page') }}">VNV</a></li>
+        <li><a href="{{ url_for('wages_page') }}">Laun</a></li>
+        <li><a href="{{ url_for('bci_page') }}">BCI</a></li>
+        <li><a href="{{ url_for('ppi_page') }}">PPI</a></li>
+        <li><a href="{{ url_for('sub_page') }}" aria-current="page">Undirliðir</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main-content" class="wrap" style="padding-top:1rem">
+  <section class="card" aria-labelledby="sub-heading">
+    <div class="card-body">
+
+      <div class="rowhead" style="margin-bottom:.75rem">
+        <h1 id="sub-heading" style="font-size:1.1rem;margin:0">Undirliðir vísitölu neysluverðs</h1>
+        <small class="muted" id="sub-date-label"></small>
+      </div>
+
+      <!-- Controls row -->
+      <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:center;margin-bottom:.75rem">
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <label for="month-select" class="muted small">Mánuður:</label>
+          <select id="month-select" style="background:#0f1317;color:#e7edf3;border:1px solid rgba(255,255,255,.15);border-radius:.4rem;padding:.3rem .6rem;font:inherit;cursor:pointer">
+            {% for m in sub_months | reverse %}
+              <option value="{{ m }}" {% if loop.first %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <label for="depth-select" class="muted small">Dýpt:</label>
+          <select id="depth-select" style="background:#0f1317;color:#e7edf3;border:1px solid rgba(255,255,255,.15);border-radius:.4rem;padding:.3rem .6rem;font:inherit;cursor:pointer">
+            <option value="0">Allt</option>
+            <option value="4" selected>2 stig (IS01…)</option>
+            <option value="5">3 stig (IS011…)</option>
+            <option value="6">4 stig (IS0111…)</option>
+          </select>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:.5rem;flex:1;min-width:160px">
+          <label for="code-search" class="muted small">Leita:</label>
+          <input id="code-search" type="search" placeholder="Kóði eða heiti…"
+                 style="flex:1;background:#0f1317;color:#e7edf3;border:1px solid rgba(255,255,255,.15);border-radius:.4rem;padding:.3rem .6rem;font:inherit"
+                 aria-label="Leita að undirliðum">
+        </div>
+
+        <small class="muted" id="row-count" aria-live="polite"></small>
+      </div>
+
+      <!-- Breadcrumb + parent stats (hidden at root) -->
+      <div id="breadcrumb" style="display:none;margin-bottom:.5rem">
+        <nav id="breadcrumb-nav" aria-label="Staðsetning í flokkum"
+             style="font-size:.875rem;display:flex;flex-wrap:wrap;align-items:center;gap:.25rem .1rem"></nav>
+        <div id="parent-stats" style="margin-top:.35rem;font-size:.85rem;color:#9fb0c2"></div>
+      </div>
+
+      <div style="overflow-x:auto">
+        <table class="stats stats--sortable" id="subTable"
+               aria-label="Undirliðir CPI eftir völdum mánuði">
+          <thead>
+            <tr>
+              <th scope="col" data-key="code">Kóði</th>
+              <th scope="col" data-key="label">Heiti</th>
+              <th scope="col" data-key="val"  class="num" aria-sort="none">Vísitala</th>
+              <th scope="col" data-key="mom"  class="num" aria-sort="none">Mán %</th>
+              <th scope="col" data-key="yoy"  class="num" aria-sort="descending">Ár %</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <p class="muted small" style="margin-top:.5rem">
+        Gögn: Hagstofan (VIS01300.px, B1997 vísitala). Gögn tiltæk frá
+        <strong>{{ sub_months[0] if sub_months else '—' }}</strong> til
+        <strong>{{ sub_months[-1] if sub_months else '—' }}</strong>.
+      </p>
+
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="wrap"><small class="muted">© {{ site_name }}</small></div>
+</footer>
+
+<style>
+  #breadcrumb-nav button {
+    background: none; border: none; color: #4fa3d1; cursor: pointer;
+    font: inherit; font-size: .875rem; padding: .1rem .2rem; text-decoration: underline;
+  }
+  #breadcrumb-nav button:hover { color: #e7edf3; }
+  #breadcrumb-nav .crumb-sep { color: #9fb0c2; margin: 0 .1rem; }
+  #breadcrumb-nav .crumb-current { color: #e7edf3; font-size: .875rem; }
+  #subTable tbody tr.row--drillable { cursor: pointer; }
+  #subTable tbody tr.row--drillable:hover td { background: rgba(255,255,255,.04); }
+  #subTable tbody tr.row--drillable td:first-child code::after {
+    content: ' ›'; color: #9fb0c2; font-style: normal;
+  }
+</style>
+<script>
+(function () {
+  // Raw data: [{code, label, rows:[{ym, mom, yoy, val}]}]
+  const RAW = {{ sub_data|tojson }};
+
+  // Index by code + month for fast lookup
+  const byCode = {};
+  for (const entry of RAW) {
+    byCode[entry.code] = { label: entry.label, byMonth: {} };
+    for (const r of entry.rows) {
+      byCode[entry.code].byMonth[r.ym] = r;
+    }
+  }
+
+  // Precompute which codes have children
+  const codesSet  = new Set(RAW.map(e => e.code));
+  const hasChildren = new Set();
+  for (const a of codesSet) {
+    for (const b of codesSet) {
+      if (b.length > a.length && b.startsWith(a)) { hasChildren.add(a); break; }
+    }
+  }
+
+  const monthSel   = document.getElementById('month-select');
+  const depthSel   = document.getElementById('depth-select');
+  const searchEl   = document.getElementById('code-search');
+  const rowCount   = document.getElementById('row-count');
+  const dateLabel  = document.getElementById('sub-date-label');
+  const tbody      = document.querySelector('#subTable tbody');
+  const headers    = document.querySelectorAll('#subTable thead th[data-key]');
+  const breadcrumb = document.getElementById('breadcrumb');
+  const crumbNav   = document.getElementById('breadcrumb-nav');
+  const parentStats = document.getElementById('parent-stats');
+
+  let sortKey  = 'yoy', sortDir = 'desc';
+  let drillCode = null;  // null = root view
+
+  const fmt = (v, d=2) => v == null ? '—' : v.toFixed(d);
+  const cls = v => v == null ? '' : (v >= 0 ? 'pos' : 'neg');
+  const fmtPct = v => v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+
+  // Build ordered list of ancestor codes (root → parent) for a given code
+  function getAncestors(code) {
+    const chain = [];
+    let p = code.slice(0, -1);
+    while (p.length >= 3) {
+      if (codesSet.has(p)) chain.unshift(p);
+      p = p.slice(0, -1);
+    }
+    return chain;
+  }
+
+  function updateBreadcrumb() {
+    if (!drillCode) {
+      breadcrumb.style.display = 'none';
+      depthSel.disabled = false;
+      return;
+    }
+    depthSel.disabled = true;
+    breadcrumb.style.display = '';
+
+    const ancestors = getAncestors(drillCode);
+    let html = '<button data-crumb="">Allt</button>';
+    for (const c of ancestors) {
+      const lbl = byCode[c]?.label || c;
+      html += `<span class="crumb-sep" aria-hidden="true">›</span>
+               <button data-crumb="${c}">${c} <span class="muted">${lbl}</span></button>`;
+    }
+    const curLabel = byCode[drillCode]?.label || drillCode;
+    html += `<span class="crumb-sep" aria-hidden="true">›</span>
+             <span class="crumb-current" aria-current="true">${drillCode} ${curLabel}</span>`;
+    crumbNav.innerHTML = html;
+
+    // Show parent's own stats for selected month
+    const ym = monthSel.value;
+    const pr = byCode[drillCode]?.byMonth[ym];
+    if (pr) {
+      const momCls = cls(pr.mom), yoyCls = cls(pr.yoy);
+      parentStats.innerHTML =
+        `Vísitala: <strong>${fmt(pr.val, 3)}</strong> &nbsp;` +
+        `Mán: <strong class="${momCls}">${fmtPct(pr.mom)}</strong> &nbsp;` +
+        `Ár: <strong class="${yoyCls}">${fmtPct(pr.yoy)}</strong>`;
+    } else {
+      parentStats.textContent = '';
+    }
+  }
+
+  function getRows(ym) {
+    const depth = parseInt(depthSel.value) || 0;
+    const query = searchEl.value.trim().toLowerCase();
+    return RAW
+      .filter(e => {
+        if (drillCode) {
+          // Show only descendants of drillCode
+          if (!e.code.startsWith(drillCode) || e.code === drillCode) return false;
+        } else {
+          if (depth > 0 && e.code.length > depth) return false;
+        }
+        if (query && !e.code.toLowerCase().includes(query) && !e.label.toLowerCase().includes(query)) return false;
+        return true;
+      })
+      .map(e => {
+        const r = byCode[e.code]?.byMonth[ym] || {};
+        return { code: e.code, label: e.label, val: r.val ?? null, mom: r.mom ?? null, yoy: r.yoy ?? null };
+      });
+  }
+
+  function sortRows(rows) {
+    return [...rows].sort((a, b) => {
+      const va = a[sortKey], vb = b[sortKey];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (typeof va === 'string') return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+      return sortDir === 'desc' ? vb - va : va - vb;
+    });
+  }
+
+  function render() {
+    const ym  = monthSel.value;
+    dateLabel.textContent = ym;
+    const rows = sortRows(getRows(ym));
+
+    rowCount.textContent = `${rows.length} liðir`;
+
+    tbody.innerHTML = rows.map(r => {
+      const drillable = hasChildren.has(r.code);
+      return `<tr${drillable ? ` class="row--drillable" data-drill="${r.code}"` : ''}>
+        <td><code>${r.code}</code></td>
+        <td>${r.label}</td>
+        <td class="num">${fmt(r.val, 3)}</td>
+        <td class="num ${cls(r.mom)}">${r.mom == null ? '—' : fmt(r.mom) + '%'}</td>
+        <td class="num ${cls(r.yoy)}">${r.yoy == null ? '—' : fmt(r.yoy) + '%'}</td>
+      </tr>`;
+    }).join('');
+
+    // Update breadcrumb parent stats (month may have changed)
+    if (drillCode) updateBreadcrumb();
+
+    headers.forEach(th => {
+      const k = th.dataset.key;
+      th.setAttribute('aria-sort', k === sortKey ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none');
+    });
+  }
+
+  // --- Event delegation: drill-down clicks on table rows ---
+  tbody.addEventListener('click', e => {
+    const row = e.target.closest('tr[data-drill]');
+    if (!row) return;
+    drillCode = row.dataset.drill;
+    updateBreadcrumb();
+    render();
+  });
+
+  // --- Event delegation: breadcrumb navigation ---
+  crumbNav.addEventListener('click', e => {
+    const btn = e.target.closest('button[data-crumb]');
+    if (!btn) return;
+    drillCode = btn.dataset.crumb || null;
+    updateBreadcrumb();
+    render();
+  });
+
+  // --- Header sort clicks ---
+  headers.forEach(th => {
+    th.addEventListener('click', () => {
+      const k = th.dataset.key;
+      if (k === sortKey) {
+        sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+      } else {
+        sortKey = k;
+        sortDir = (k === 'code' || k === 'label') ? 'asc' : 'desc';
+      }
+      render();
+    });
+  });
+
+  monthSel.addEventListener('change', render);
+  depthSel.addEventListener('change', render);
+
+  // Searching clears the drill-down to avoid confusing intersections
+  searchEl.addEventListener('input', () => {
+    if (searchEl.value.trim()) {
+      drillCode = null;
+      updateBreadcrumb();
+    }
+    render();
+  });
+
+  render();
+})();
+</script>
+
+</body>
+</html>

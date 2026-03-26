@@ -21,7 +21,8 @@
         <li><a href="{{ url_for('cpi_page') }}" aria-current="page">VNV</a></li>
         <li><a href="{{ url_for('wages_page') }}">Laun</a></li>
         <li><a href="{{ url_for('bci_page') }}">BCI</a></li>
-        <li><a href="{{ url_for('ppi_page') }}">PPI</a></li>
+        <li><a href="{{ url_for('ppi_page') }}"{% if request.endpoint == 'ppi_page' %} aria-current="page"{% endif %}>PPI</a></li>
+        <li><a href="{{ url_for('sub_page') }}"{% if request.endpoint == 'sub_page' %} aria-current="page"{% endif %}>Undirliðir</a></li>
       </ul>
     </nav>
   </div>
@@ -105,7 +106,12 @@
 
       <!-- Movers (sortable) -->
       <div class="stat-card" style="margin-top:1rem">
-        <div class="stat-card__title">Undirliðir sem hreyfðust mest nýlega</div>
+        <div class="stat-card__title" style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.5rem">
+          <span>Undirliðir – hreyfingar
+            {% if cpi_movers_date %}<span class="muted" style="font-weight:400"> ({{ cpi_movers_date }})</span>{% endif %}
+          </span>
+          <a href="{{ url_for('sub_page') }}" class="small" style="white-space:nowrap">Skoða alla undirliði →</a>
+        </div>
         <table class="stats stats--sortable" id="subTable"
                aria-label="Undirliðir CPI raðaðir eftir ársbreytingu">
           <thead>

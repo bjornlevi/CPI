@@ -25,6 +25,7 @@ from .pipelines.cpi import (
     fetch_cpi_data,   # fetches Hagstofan CPI source
     isnr_label,       # pretty label for ISNR code
     get_isnr_series,  # returns DataFrame with columns: date, value, (maybe Monthly Change)
+    list_isnr,        # sorted list of available ISNR codes
     compute_trend as cpi_trend,
 )
 
@@ -302,6 +303,7 @@ def _cpi_context() -> dict:
         })
 
     cpi_movers = curated_data + top_data
+    cpi_movers_date = latest_date.strftime("%Y-%m") if latest_date else None
 
     return dict(
         # short window (homepage)
@@ -318,6 +320,7 @@ def _cpi_context() -> dict:
         # tables
         cpi_table=cpi_table,
         cpi_movers=cpi_movers,
+        cpi_movers_date=cpi_movers_date,
         # seasonal analysis
         monthly_changes=monthly_changes,
     )
@@ -657,6 +660,36 @@ def _ppi_context(requested_cat: str | None):
         ppi_sub_meta=ppi_sub_meta, ppi_sub_series_full=ppi_sub_series_full,
     )
 
+def _cpi_sub_context() -> dict:
+    """Build context for the CPI sub-categories detail page."""
+    src = fetch_cpi_data()
+    all_codes = [c for c in list_isnr(src) if c != "IS00"]
+
+    # Build per-code monthly series: {code: [{ym, mom, yoy}, ...]}
+    sub_data = []
+    for code in all_codes:
+        df = get_isnr_series(src, code)
+        if df.empty or len(df) < 2:
+            continue
+        label = isnr_label(code) or code
+        rows = []
+        for i, row in df.iterrows():
+            ym = row["date"].strftime("%Y-%m")
+            mom = None if pd.isna(row["Monthly Change"]) else round(float(row["Monthly Change"]), 4)
+            yoy = None
+            if i >= 12:
+                prev12 = df.iloc[i - 12]["value"]
+                if prev12 and prev12 != 0:
+                    yoy = round((float(row["value"]) / float(prev12) - 1) * 100, 4)
+            rows.append({"ym": ym, "mom": mom, "yoy": yoy, "val": round(float(row["value"]), 4)})
+        sub_data.append({"code": code, "label": label, "rows": rows})
+
+    # Available months (union across all codes, sorted)
+    all_months = sorted({r["ym"] for entry in sub_data for r in entry["rows"]})
+
+    return dict(sub_data=sub_data, sub_months=all_months)
+
+
 # -----------------------------------------------------------------------------
 # Flask app / routes
 # -----------------------------------------------------------------------------
@@ -713,6 +746,12 @@ def create_app():
     def ppi_page():
         ctx = _ppi_context(request.args.get("cat"))
         return render_template("ppi.html", site_name=app.config["SITE_NAME"], **ctx)
+
+    # CPI sub-categories
+    @app.get("/sub")
+    def sub_page():
+        ctx = _cpi_sub_context()
+        return render_template("sub.html", site_name=app.config["SITE_NAME"], **ctx)
 
     return app
 
