@@ -2,41 +2,53 @@
 <html lang="is">
 <head>
   <meta charset="utf-8">
-  <title>CPI – {{ site_name }}</title>
+  <title>VNV – {{ site_name }}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v=18">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="{{ url_for('static', filename='js/charts.js') }}?v=17"></script>
-
 </head>
 <body>
+
+<a class="skip-link" href="#main-content">Fara beint í efni</a>
+
 <header class="topbar">
-  <div class="wrap"><h1 class="brand">VNV (CPI)</h1></div>
+  <div class="wrap topbar-inner">
+    <p class="brand"><a href="{{ url_for('index') }}">{{ site_name }}</a></p>
+    <nav aria-label="Aðalvalmynd">
+      <ul class="site-nav">
+        <li><a href="{{ url_for('index') }}">Heim</a></li>
+        <li><a href="{{ url_for('cpi_page') }}" aria-current="page">VNV</a></li>
+        <li><a href="{{ url_for('wages_page') }}">Laun</a></li>
+        <li><a href="{{ url_for('bci_page') }}">BCI</a></li>
+        <li><a href="{{ url_for('ppi_page') }}">PPI</a></li>
+      </ul>
+    </nav>
+  </div>
 </header>
 
-<main class="wrap">
-  <section class="card card--chart">
+<main id="main-content" class="wrap" style="padding-top:1rem">
+  <section class="card card--chart" aria-labelledby="cpi-heading">
     <div class="card-body">
       <div class="rowhead">
-        <h2>Heildarvísitala + undirliðir</h2>
+        <h1 id="cpi-heading" style="font-size:1.1rem;margin:0">Vísitala neysluverðs (VNV)</h1>
         <small class="muted">Síðast uppfært: {{ updated }}</small>
       </div>
 
       <div class="range-controls" data-chart="cpiChart">
         <div class="range-buttons">
-          <button type="button" data-range="2y"  class="is-active">2 ár</button>
-          <button type="button" data-range="5y">5 ár</button>
-          <button type="button" data-range="10y">10 ár</button>
-          <button type="button" data-range="all">Allt</button>
+          <button type="button" data-range="2y" aria-pressed="false">2 ár</button>
+          <button type="button" data-range="5y" class="is-active" aria-pressed="true">5 ár</button>
+          <button type="button" data-range="10y" aria-pressed="false">10 ár</button>
+          <button type="button" data-range="all" aria-pressed="false">Allt</button>
         </div>
 
         <div class="range-window">
-          <!-- left handle (start) -->
-          <input id="cpiChart-win-start" type="range" min="0" step="1">
-          <!-- right handle (end) -->
-          <input id="cpiChart-win-end"   type="range" min="1" step="1" class="is-end">
-          <div class="range-labels">
+          <input id="cpiChart-win-start" type="range" min="0" step="1"
+                 aria-label="Upphaf tímabils">
+          <input id="cpiChart-win-end" type="range" min="1" step="1" class="is-end"
+                 aria-label="Lok tímabils">
+          <div class="range-labels" aria-hidden="true">
             <span id="cpiChart-win-start-label">—</span>
             <span id="cpiChart-win-end-label">—</span>
           </div>
@@ -49,24 +61,24 @@
       </div>
 
       <div class="chart-box chart-box--md">
-        <canvas id="cpiChart"></canvas>
+        <canvas id="cpiChart" role="img" aria-label="Línurit yfir vísitölu neysluverðs og spá"></canvas>
       </div>
-      
+
       <div class="rowfoot">
         <span id="cpiChart-net" class="muted small"></span>
-        <ul id="cpiChart-net-all" class="pill-list"></ul>
+        <ul id="cpiChart-net-all" class="pill-list" aria-label="Nettóbreyting á sýnilegum línum"></ul>
       </div>
 
       <div class="stat-card" style="margin-top:1rem">
         <div class="stat-card__title">Samantekt – VNV</div>
-        <table class="stats">
+        <table class="stats" aria-label="Tölfræðileg samantekt yfir VNV breytingar">
           <thead>
             <tr>
-              <th>Breyt­ing</th>
-              <th>Meðaltal (saga)</th>
-              <th>Miðgildi (saga)</th>
-              <th>Núverandi</th>
-              <th>Spá (næstu {{ cpi_table.monthly.horizon }})</th>
+              <th scope="col">Breyt­ing</th>
+              <th scope="col">Meðaltal (saga)</th>
+              <th scope="col">Miðgildi (saga)</th>
+              <th scope="col">Núverandi</th>
+              <th scope="col">Spá (næstu {{ cpi_table.monthly.horizon }})</th>
             </tr>
           </thead>
           <tbody>
@@ -90,20 +102,19 @@
           </tbody>
         </table>
       </div>
-      <!-- === /RESTORED === -->
 
       <!-- Movers (sortable) -->
       <div class="stat-card" style="margin-top:1rem">
         <div class="stat-card__title">Undirliðir sem hreyfðust mest nýlega</div>
-
-        <table class="stats stats--sortable" id="subTable">
+        <table class="stats stats--sortable" id="subTable"
+               aria-label="Undirliðir CPI raðaðir eftir ársbreytingu">
           <thead>
             <tr>
-              <th data-key="label">Liður</th>
-              <th data-key="mom"   class="num" aria-sort="none">Mán %</th>
-              <th data-key="yoy"   class="num" aria-sort="descending">Ár %</th>
-              <th data-key="d_mom" class="num" aria-sort="none">ΔM (pp)</th>
-              <th data-key="d_yoy" class="num" aria-sort="none">ΔÁ (pp)</th>
+              <th scope="col" data-key="label">Liður</th>
+              <th scope="col" data-key="mom"   class="num" aria-sort="none">Mán %</th>
+              <th scope="col" data-key="yoy"   class="num" aria-sort="descending">Ár %</th>
+              <th scope="col" data-key="d_mom" class="num" aria-sort="none">ΔM (pp)</th>
+              <th scope="col" data-key="d_yoy" class="num" aria-sort="none">ΔÁ (pp)</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -138,7 +149,6 @@
             </tr>
           `).join('');
 
-          // update header aria-sort
           document.querySelectorAll('#subTable thead th').forEach(th => th.setAttribute('aria-sort','none'));
           const th = document.querySelector(`#subTable thead th[data-key="${sortKey}"]`);
           if (th) th.setAttribute('aria-sort', dir === 'desc' ? 'descending' : 'ascending');
@@ -159,33 +169,36 @@
 
     </div>
   </section>
-  <section class="card card--chart" style="margin-top:1rem">
+
+  <section class="card card--chart" style="margin-top:1rem" aria-labelledby="seasonal-heading">
     <div class="card-body">
       <div class="rowhead">
-        <h2>Meðaltal mánaðarlegrar CPI hækkunar eftir mánuði</h2>
+        <h2 id="seasonal-heading">Meðaltal mánaðarlegrar CPI hækkunar eftir mánuði</h2>
         <small class="muted" id="seasonal-range-label"></small>
       </div>
 
       <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:.5rem">
         <label for="seasonal-slider" class="muted small">Fjöldi ára:</label>
         <input id="seasonal-slider" type="range" min="2" step="1"
-               style="flex:1;min-width:120px;max-width:320px">
-        <span id="seasonal-year-val" style="min-width:3ch;text-align:right;font-variant-numeric:tabular-nums"></span>
+               style="flex:1;min-width:120px;max-width:320px"
+               aria-describedby="seasonal-range-label">
+        <span id="seasonal-year-val" aria-live="polite" style="min-width:3ch;text-align:right;font-variant-numeric:tabular-nums"></span>
       </div>
 
       <div class="chart-box chart-box--md">
-        <canvas id="seasonalChart"></canvas>
+        <canvas id="seasonalChart" role="img" aria-label="Súlurit yfir meðaltal mánaðarlegrar CPI hækkunar eftir mánuði"></canvas>
       </div>
 
-      <table class="stats" id="seasonal-table" style="margin-top:.75rem;font-size:.85rem">
+      <table class="stats" id="seasonal-table" style="margin-top:.75rem;font-size:.85rem"
+             aria-label="Tölfræðileg samantekt yfir mánaðarlegar CPI breytingar">
         <thead>
           <tr>
-            <th>Mánuður</th>
-            <th class="num">Meðaltal</th>
-            <th class="num">Miðgildi</th>
-            <th class="num">Lægst</th>
-            <th class="num">Hæst</th>
-            <th class="num">N</th>
+            <th scope="col">Mánuður</th>
+            <th scope="col" class="num">Meðaltal</th>
+            <th scope="col" class="num">Miðgildi</th>
+            <th scope="col" class="num">Lægst</th>
+            <th scope="col" class="num">Hæst</th>
+            <th scope="col" class="num">N</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -194,23 +207,38 @@
   </section>
 </main>
 
+<footer class="footer">
+  <div class="wrap"><small class="muted">© {{ site_name }}</small></div>
+</footer>
+
+<script>
+  EconCharts.initCPIChart('cpiChart', {
+    fullLabels: {{ full_labels|tojson }},
+    fullValues: {{ full_values|tojson }},
+    futLabels:  {{ fut_labels|tojson }},
+    futValues:  {{ fut_values|tojson }},
+    futValues12: {{ fut_values_12|tojson }},
+    subMeta:    {{ cpi_sub_meta|tojson }},
+    subSeries:  {{ cpi_sub_series|tojson }},
+    initialRange: "5y"
+  });
+</script>
+
 <script>
 (function () {
   const RAW = {{ monthly_changes|tojson }};
   const MONTH_NAMES = ['Jan','Feb','Mar','Apr','Maí','Jún','Júl','Ágú','Sep','Okt','Nóv','Des'];
 
-  const slider   = document.getElementById('seasonal-slider');
-  const yearVal  = document.getElementById('seasonal-year-val');
+  const slider     = document.getElementById('seasonal-slider');
+  const yearVal    = document.getElementById('seasonal-year-val');
   const rangeLabel = document.getElementById('seasonal-range-label');
-  const tbody    = document.querySelector('#seasonal-table tbody');
+  const tbody      = document.querySelector('#seasonal-table tbody');
 
-  // Determine year range from data
-  const allYears = [...new Set(RAW.map(d => d.year))].sort((a,b)=>a-b);
+  const allYears = [...new Set(RAW.map(d => d.year))].sort((a,b) => a-b);
   const maxYears = allYears.length;
   slider.max = maxYears;
   slider.value = Math.min(10, maxYears);
 
-  // Build Chart.js bar chart
   const ctx = document.getElementById('seasonalChart').getContext('2d');
   const chart = new Chart(ctx, {
     type: 'bar',
@@ -220,11 +248,7 @@
       maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: item => `${item.parsed.y.toFixed(3)}%`
-          }
-        }
+        tooltip: { callbacks: { label: item => `${item.parsed.y.toFixed(3)}%` } }
       },
       scales: {
         x: { grid: { color: 'rgba(255,255,255,.06)' }, ticks: { color: '#9fb0c2' } },
@@ -240,10 +264,8 @@
     const maxYear = Math.max(...allYears);
     const minYear = maxYear - nYears + 1;
     const filtered = RAW.filter(d => d.year >= minYear);
-
     const byMonth = Array.from({length: 12}, () => []);
     for (const d of filtered) byMonth[d.month - 1].push(d.change);
-
     return byMonth.map(vals => {
       if (!vals.length) return null;
       const sorted = [...vals].sort((a,b) => a-b);
@@ -261,11 +283,10 @@
     const maxYear = Math.max(...allYears);
     const minYear = maxYear - nYears + 1;
     rangeLabel.textContent = `${minYear}–${maxYear}`;
+    slider.setAttribute('aria-valuetext', `${nYears} ár (${minYear}–${maxYear})`);
 
     const stats = computeStats(nYears);
     const avgs = stats.map(s => s ? parseFloat(s.avg.toFixed(4)) : null);
-
-    // colour bars: positive = warm red, negative = cool blue
     const colors = avgs.map(v => v == null ? '#555'
       : v >= 0 ? `rgba(255,${Math.round(80 - Math.min(v,3)/3*60)},80,.75)`
                : `rgba(80,160,255,.75)`);
@@ -278,7 +299,6 @@
     }];
     chart.update('none');
 
-    // table
     tbody.innerHTML = stats.map((s, i) => s ? `
       <tr>
         <td>${MONTH_NAMES[i]}</td>
@@ -296,22 +316,5 @@
 })();
 </script>
 
-<footer class="footer">
-  <div class="wrap"><small class="muted"><a href="{{ url_for('index') }}">← Til baka</a></small></div>
-</footer>
-
-<!-- Chart init -->
-<script>
-  EconCharts.initCPIChart('cpiChart', {
-    fullLabels: {{ full_labels|tojson }},
-    fullValues: {{ full_values|tojson }},
-    futLabels:  {{ fut_labels|tojson }},
-    futValues:  {{ fut_values|tojson }},
-    futValues12: {{ fut_values_12|tojson }},
-    subMeta:    {{ cpi_sub_meta|tojson }},
-    subSeries:  {{ cpi_sub_series|tojson }}, 
-    initialRange: "5y"
-  });
-</script>
 </body>
 </html>

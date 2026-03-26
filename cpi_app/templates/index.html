@@ -4,32 +4,49 @@
   <meta charset="utf-8">
   <title>{{ site_name }}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v=17">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v=18">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="{{ url_for('static', filename='js/charts.js') }}?v=17"></script>
-
 </head>
 <body>
-<header class="topbar"><div class="wrap"><h1 class="brand">{{ site_name }}</h1></div></header>
 
-<main class="wrap">
+<a class="skip-link" href="#main-content">Fara beint í efni</a>
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <p class="brand"><a href="{{ url_for('index') }}">{{ site_name }}</a></p>
+    <nav aria-label="Aðalvalmynd">
+      <ul class="site-nav">
+        <li><a href="{{ url_for('index') }}" aria-current="page">Heim</a></li>
+        <li><a href="{{ url_for('cpi_page') }}">VNV</a></li>
+        <li><a href="{{ url_for('wages_page') }}">Laun</a></li>
+        <li><a href="{{ url_for('bci_page') }}">BCI</a></li>
+        <li><a href="{{ url_for('ppi_page') }}">PPI</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main-content" class="wrap" style="padding-top:1rem">
   <div class="cards">
 
     <!-- CPI card -->
-    <section class="card card--chart mb">
+    <section class="card card--chart mb" aria-labelledby="cpi-heading">
       <div class="card-body">
         <div class="rowhead">
-          <h2>Vísitala neysluverðs</h2>
+          <h2 id="cpi-heading">Vísitala neysluverðs</h2>
           <small class="muted">Síðast uppfært: {{ updated }}</small>
         </div>
         <div class="range-controls" data-chart="cpiChart">
-          <button type="button" data-range="2y"  class="is-active">2 ár</button>
-          <button type="button" data-range="5y">5 ár</button>
-          <button type="button" data-range="10y">10 ár</button>
-          <button type="button" data-range="all">Allt</button>
-        </div>        
+          <div class="range-buttons">
+            <button type="button" data-range="2y" class="is-active" aria-pressed="true">2 ár</button>
+            <button type="button" data-range="5y" aria-pressed="false">5 ár</button>
+            <button type="button" data-range="10y" aria-pressed="false">10 ár</button>
+            <button type="button" data-range="all" aria-pressed="false">Allt</button>
+          </div>
+        </div>
         <div class="chart-box">
-          <canvas id="cpiChart"></canvas>
+          <canvas id="cpiChart" role="img" aria-label="Línurit yfir vísitölu neysluverðs"></canvas>
         </div>
         <div class="rowfoot">
           <a class="btn-link" href="{{ url_for('cpi_page') }}">Skoða nánar →</a>
@@ -38,20 +55,22 @@
     </section>
 
     <!-- Wages card -->
-    <section class="card card--chart mb">
+    <section class="card card--chart mb" aria-labelledby="wages-heading">
       <div class="card-body">
         <div class="rowhead">
-          <h2>Launavísitala – {{ wage_category }}</h2>
+          <h2 id="wages-heading">Launavísitala – {{ wage_category }}</h2>
           <small class="muted">Síðast uppfært: {{ wages_updated }}</small>
         </div>
         <div class="range-controls" data-chart="wageChart">
-          <button type="button" data-range="2y"  class="is-active">2 ár</button>
-          <button type="button" data-range="5y">5 ár</button>
-          <button type="button" data-range="10y">10 ár</button>
-          <button type="button" data-range="all">Allt</button>
-        </div>        
+          <div class="range-buttons">
+            <button type="button" data-range="2y" class="is-active" aria-pressed="true">2 ár</button>
+            <button type="button" data-range="5y" aria-pressed="false">5 ár</button>
+            <button type="button" data-range="10y" aria-pressed="false">10 ár</button>
+            <button type="button" data-range="all" aria-pressed="false">Allt</button>
+          </div>
+        </div>
         <div class="chart-box">
-          <canvas id="wageChart"></canvas>
+          <canvas id="wageChart" role="img" aria-label="Línurit yfir launavísitölu"></canvas>
         </div>
         <div class="rowfoot">
           <a class="btn-link" href="{{ url_for('wages_page', cat=wage_category) }}">Skoða nánar →</a>
@@ -60,20 +79,22 @@
     </section>
 
     <!-- BCI card -->
-    <section class="card card--chart mb">
+    <section class="card card--chart mb" aria-labelledby="bci-heading">
       <div class="card-body">
         <div class="rowhead">
-          <h2>Byggingarkostnaðarvísitala</h2>
+          <h2 id="bci-heading">Byggingarkostnaðarvísitala</h2>
           <small class="muted">Síðast uppfært: {{ bci_updated }}</small>
         </div>
         <div class="range-controls" data-chart="bciChart">
-          <button type="button" data-range="2y"  class="is-active">2 ár</button>
-          <button type="button" data-range="5y">5 ár</button>
-          <button type="button" data-range="10y">10 ár</button>
-          <button type="button" data-range="all">Allt</button>
-        </div>        
+          <div class="range-buttons">
+            <button type="button" data-range="2y" class="is-active" aria-pressed="true">2 ár</button>
+            <button type="button" data-range="5y" aria-pressed="false">5 ár</button>
+            <button type="button" data-range="10y" aria-pressed="false">10 ár</button>
+            <button type="button" data-range="all" aria-pressed="false">Allt</button>
+          </div>
+        </div>
         <div class="chart-box">
-          <canvas id="bciChart"></canvas>
+          <canvas id="bciChart" role="img" aria-label="Línurit yfir byggingarkostnaðarvísitölu"></canvas>
         </div>
         <div class="rowfoot">
           <a class="btn-link" href="{{ url_for('bci_page') }}">Skoða nánar →</a>
@@ -82,20 +103,22 @@
     </section>
 
     <!-- PPI card -->
-    <section class="card card--chart mb">
+    <section class="card card--chart mb" aria-labelledby="ppi-heading">
       <div class="card-body">
         <div class="rowhead">
-          <h2>Vísitala framleiðsluverðs</h2>
+          <h2 id="ppi-heading">Vísitala framleiðsluverðs</h2>
           <small class="muted">Síðast uppfært: {{ ppi_updated }}</small>
         </div>
         <div class="range-controls" data-chart="ppiChart">
-          <button type="button" data-range="2y"  class="is-active">2 ár</button>
-          <button type="button" data-range="5y">5 ár</button>
-          <button type="button" data-range="10y">10 ár</button>
-          <button type="button" data-range="all">Allt</button>
-        </div>        
+          <div class="range-buttons">
+            <button type="button" data-range="2y" class="is-active" aria-pressed="true">2 ár</button>
+            <button type="button" data-range="5y" aria-pressed="false">5 ár</button>
+            <button type="button" data-range="10y" aria-pressed="false">10 ár</button>
+            <button type="button" data-range="all" aria-pressed="false">Allt</button>
+          </div>
+        </div>
         <div class="chart-box">
-          <canvas id="ppiChart"></canvas>
+          <canvas id="ppiChart" role="img" aria-label="Línurit yfir vísitölu framleiðsluverðs"></canvas>
         </div>
         <div class="rowfoot">
           <a class="btn-link" href="{{ url_for('ppi_page') }}">Skoða nánar →</a>
@@ -106,7 +129,9 @@
   </div>
 </main>
 
-<footer class="footer"><div class="wrap"><small class="muted">© {{ site_name }}</small></div></footer>
+<footer class="footer">
+  <div class="wrap"><small class="muted">© {{ site_name }}</small></div>
+</footer>
 
 <script>
   EconCharts.initCPIChart('cpiChart', {
@@ -116,8 +141,8 @@
     futValues:  {{ fut_values|tojson }},
     futValues12: {{ fut_values_12|tojson }},
     subMeta:    {{ cpi_sub_meta|tojson }},
-    subSeries:  {{ cpi_sub_series|tojson }},   <!-- full-length per code -->
-    initialRange: "5y"
+    subSeries:  {{ cpi_sub_series|tojson }},
+    initialRange: "2y"
   });
 
   EconCharts.initWageChart('wageChart', {

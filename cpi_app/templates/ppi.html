@@ -2,60 +2,71 @@
 <html lang="is">
 <head>
   <meta charset="utf-8">
-  <title>Vísitala framleiðsluverðs – {{ site_name }}</title>
+  <title>PPI – {{ site_name }}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v=18">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="{{ url_for('static', filename='js/charts.js') }}?v=17"></script>
-
 </head>
 <body>
+
+<a class="skip-link" href="#main-content">Fara beint í efni</a>
+
 <header class="topbar">
-  <div class="wrap"><h1 class="brand">Vísitala framleiðsluverðs</h1></div>
+  <div class="wrap topbar-inner">
+    <p class="brand"><a href="{{ url_for('index') }}">{{ site_name }}</a></p>
+    <nav aria-label="Aðalvalmynd">
+      <ul class="site-nav">
+        <li><a href="{{ url_for('index') }}">Heim</a></li>
+        <li><a href="{{ url_for('cpi_page') }}">VNV</a></li>
+        <li><a href="{{ url_for('wages_page') }}">Laun</a></li>
+        <li><a href="{{ url_for('bci_page') }}">BCI</a></li>
+        <li><a href="{{ url_for('ppi_page') }}" aria-current="page">PPI</a></li>
+      </ul>
+    </nav>
+  </div>
 </header>
 
-<main class="wrap">
-  <section class="card card--chart">
+<main id="main-content" class="wrap" style="padding-top:1rem">
+  <section class="card card--chart" aria-labelledby="ppi-heading">
     <div class="card-body">
       <div class="rowhead">
-        <h2>{{ ppi_category }}</h2>
+        <h1 id="ppi-heading" style="font-size:1.1rem;margin:0">Vísitala framleiðsluverðs – {{ ppi_category }}</h1>
         <small class="muted">Síðast uppfært: {{ ppi_updated }}</small>
       </div>
 
-      <div class="range-controls" data-chart="cpiChart">
+      <div class="range-controls" data-chart="ppiChart">
         <div class="range-buttons">
-          <button type="button" data-range="2y"  class="is-active">2 ár</button>
-          <button type="button" data-range="5y">5 ár</button>
-          <button type="button" data-range="10y">10 ár</button>
-          <button type="button" data-range="all">Allt</button>
+          <button type="button" data-range="2y" aria-pressed="false">2 ár</button>
+          <button type="button" data-range="5y" class="is-active" aria-pressed="true">5 ár</button>
+          <button type="button" data-range="10y" aria-pressed="false">10 ár</button>
+          <button type="button" data-range="all" aria-pressed="false">Allt</button>
         </div>
 
         <div class="range-window">
-          <!-- left handle (start) -->
-          <input id="cpiChart-win-start" type="range" min="0" step="1">
-          <!-- right handle (end) -->
-          <input id="cpiChart-win-end"   type="range" min="1" step="1" class="is-end">
-          <div class="range-labels">
-            <span id="cpiChart-win-start-label">—</span>
-            <span id="cpiChart-win-end-label">—</span>
+          <input id="ppiChart-win-start" type="range" min="0" step="1"
+                 aria-label="Upphaf tímabils">
+          <input id="ppiChart-win-end" type="range" min="1" step="1" class="is-end"
+                 aria-label="Lok tímabils">
+          <div class="range-labels" aria-hidden="true">
+            <span id="ppiChart-win-start-label">—</span>
+            <span id="ppiChart-win-end-label">—</span>
           </div>
         </div>
 
-  <label class="muted small" style="display:inline-flex;gap:.5rem;align-items:center;margin-top:.25rem">
-    <input id="cpiChart-norm-toggle" type="checkbox">
-    Normalisera (100 við upphaf glugga)
-  </label>
-</div>
+        <label class="muted small" style="display:inline-flex;gap:.5rem;align-items:center;margin-top:.25rem">
+          <input id="ppiChart-norm-toggle" type="checkbox">
+          Normalisera (100 við upphaf glugga)
+        </label>
+      </div>
 
-      
       <div class="chart-box chart-box--md">
-        <canvas id="ppiChart"></canvas>
+        <canvas id="ppiChart" role="img" aria-label="Línurit yfir vísitölu framleiðsluverðs – {{ ppi_category }}"></canvas>
       </div>
 
       <div class="rowfoot">
         <span id="ppiChart-net" class="muted small"></span>
-        <ul id="ppiChart-net-all" class="pill-list"></ul>
+        <ul id="ppiChart-net-all" class="pill-list" aria-label="Nettóbreyting á sýnilegum línum"></ul>
       </div>
 
     </div>
@@ -63,7 +74,7 @@
 </main>
 
 <footer class="footer">
-  <div class="wrap"><small class="muted"><a href="{{ url_for('index') }}">← Til baka</a></small></div>
+  <div class="wrap"><small class="muted">© {{ site_name }}</small></div>
 </footer>
 
 <script>

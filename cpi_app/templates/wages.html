@@ -4,77 +4,92 @@
   <meta charset="utf-8">
   <title>Launavísitala – {{ site_name }}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v=18">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="{{ url_for('static', filename='js/charts.js') }}?v=17"></script>
-
 </head>
 <body>
+
+<a class="skip-link" href="#main-content">Fara beint í efni</a>
+
 <header class="topbar">
-  <div class="wrap"><h1 class="brand">Launavísitala</h1></div>
+  <div class="wrap topbar-inner">
+    <p class="brand"><a href="{{ url_for('index') }}">{{ site_name }}</a></p>
+    <nav aria-label="Aðalvalmynd">
+      <ul class="site-nav">
+        <li><a href="{{ url_for('index') }}">Heim</a></li>
+        <li><a href="{{ url_for('cpi_page') }}">VNV</a></li>
+        <li><a href="{{ url_for('wages_page') }}" aria-current="page">Laun</a></li>
+        <li><a href="{{ url_for('bci_page') }}">BCI</a></li>
+        <li><a href="{{ url_for('ppi_page') }}">PPI</a></li>
+      </ul>
+    </nav>
+  </div>
 </header>
 
-<main class="wrap">
-  <section class="card card--chart">
+<main id="main-content" class="wrap" style="padding-top:1rem">
+  <section class="card card--chart" aria-labelledby="wages-heading">
     <div class="card-body">
       <div class="rowhead">
-        <h2>{{ wage_category }}</h2>
+        <h1 id="wages-heading" style="font-size:1.1rem;margin:0">Launavísitala – {{ wage_category }}</h1>
         <small class="muted">Síðast uppfært: {{ wages_updated }}</small>
       </div>
 
-      <div class="range-controls" data-chart="cpiChart">
-      <div class="range-buttons">
-        <button type="button" data-range="2y"  class="is-active">2 ár</button>
-        <button type="button" data-range="5y">5 ár</button>
-        <button type="button" data-range="10y">10 ár</button>
-        <button type="button" data-range="all">Allt</button>
-      </div>
-
-      <div class="range-window">
-        <!-- left handle (start) -->
-        <input id="cpiChart-win-start" type="range" min="0" step="1">
-        <!-- right handle (end) -->
-        <input id="cpiChart-win-end"   type="range" min="1" step="1" class="is-end">
-        <div class="range-labels">
-          <span id="cpiChart-win-start-label">—</span>
-          <span id="cpiChart-win-end-label">—</span>
+      <div class="range-controls" data-chart="wageChart">
+        <div class="range-buttons">
+          <button type="button" data-range="2y" aria-pressed="false">2 ár</button>
+          <button type="button" data-range="5y" class="is-active" aria-pressed="true">5 ár</button>
+          <button type="button" data-range="10y" aria-pressed="false">10 ár</button>
+          <button type="button" data-range="all" aria-pressed="false">Allt</button>
         </div>
+
+        <div class="range-window">
+          <input id="wageChart-win-start" type="range" min="0" step="1"
+                 aria-label="Upphaf tímabils">
+          <input id="wageChart-win-end" type="range" min="1" step="1" class="is-end"
+                 aria-label="Lok tímabils">
+          <div class="range-labels" aria-hidden="true">
+            <span id="wageChart-win-start-label">—</span>
+            <span id="wageChart-win-end-label">—</span>
+          </div>
+        </div>
+
+        <label class="muted small" style="display:inline-flex;gap:.5rem;align-items:center;margin-top:.25rem">
+          <input id="wageChart-norm-toggle" type="checkbox">
+          Normalisera (100 við upphaf glugga)
+        </label>
       </div>
 
-      <label class="muted small" style="display:inline-flex;gap:.5rem;align-items:center;margin-top:.25rem">
-        <input id="cpiChart-norm-toggle" type="checkbox">
-        Normalisera (100 við upphaf glugga)
-      </label>
-    </div>
-
-      <p class="muted small" style="margin:0">
-        Skoða:
-        {% for c in wage_categories %}
-          {% if not loop.first %} · {% endif %}
-          <a href="{{ url_for('wages_page', cat=c) }}" class="{{ 'active' if c==wage_category else '' }}">{{ c }}</a>
-        {% endfor %}
-      </p>
+      <nav aria-label="Launaflokkar" style="margin:.25rem 0">
+        <p class="muted small" style="margin:0">
+          Skoða:
+          {% for c in wage_categories %}
+            {% if not loop.first %} · {% endif %}
+            <a href="{{ url_for('wages_page', cat=c) }}"
+               {% if c == wage_category %}aria-current="page"{% endif %}>{{ c }}</a>
+          {% endfor %}
+        </p>
+      </nav>
 
       <div class="chart-box chart-box--md">
-        <canvas id="wageChart"></canvas>
+        <canvas id="wageChart" role="img" aria-label="Línurit yfir launavísitölu – {{ wage_category }}"></canvas>
       </div>
-            
+
       <div class="rowfoot">
         <span id="wageChart-net" class="muted small"></span>
-        <ul id="wageChart-net-all" class="pill-list"></ul>
+        <ul id="wageChart-net-all" class="pill-list" aria-label="Nettóbreyting á sýnilegum línum"></ul>
       </div>
 
       <div class="stat-card">
         <div class="stat-card__title">Samantekt – Launavísitala ({{ wage_category }})</div>
-        <table class="stats">
+        <table class="stats" aria-label="Tölfræðileg samantekt yfir launabreytingar">
           <thead>
             <tr>
-              <th>Breyt­ing</th>
-              <th>Meðaltal (saga)</th>
-              <th>Miðgildi (saga)</th>
-              <th>Núverandi</th>
-              <th>Spá (næstu {{ wage_table.monthly.horizon }})</th>
+              <th scope="col">Breyt­ing</th>
+              <th scope="col">Meðaltal (saga)</th>
+              <th scope="col">Miðgildi (saga)</th>
+              <th scope="col">Núverandi</th>
+              <th scope="col">Spá (næstu {{ wage_table.monthly.horizon }})</th>
             </tr>
           </thead>
           <tbody>
@@ -99,10 +114,12 @@
         </table>
 
         {% if real_wage_yoy is not none %}
-          <p class="muted small">Raunlaun, ársbreyting ({{ wage_category }}): <strong>{{ '%.2f'|format(real_wage_yoy) }}%</strong></p>
+          <p class="muted small" style="padding:.5rem .75rem;margin:0">
+            Raunlaun, ársbreyting ({{ wage_category }}): <strong>{{ '%.2f'|format(real_wage_yoy) }}%</strong>
+          </p>
         {% endif %}
         {% if wage_category != 'TOTAL' and wage_gap_vs_total is not none %}
-          <p class="muted small">
+          <p class="muted small" style="padding:.5rem .75rem;margin:0">
             Mismunur á ársbreytingu m.v. TOTAL: <strong>{{ '%.2f'|format(wage_gap_vs_total) }}%</strong>
             {% if wage_identical_to_total %} · <em>Ath:</em> röðin virðist eins og TOTAL{% endif %}
           </p>
@@ -113,7 +130,7 @@
 </main>
 
 <footer class="footer">
-  <div class="wrap"><small class="muted"><a href="{{ url_for('index') }}">← Til baka</a></small></div>
+  <div class="wrap"><small class="muted">© {{ site_name }}</small></div>
 </footer>
 
 <script>
