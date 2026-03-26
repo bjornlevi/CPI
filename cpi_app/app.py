@@ -173,6 +173,10 @@ def _cpi_context() -> dict:
         cpi_actuals = s.scalars(select(CPIActual).order_by(CPIActual.date)).all()
         full_labels = [a.date.strftime("%Y-%m") for a in cpi_actuals]
         full_values = [a.cpi for a in cpi_actuals]
+        monthly_changes = [
+            {"year": a.date.year, "month": a.date.month, "change": a.monthly_change}
+            for a in cpi_actuals if a.monthly_change is not None
+        ]
 
         # latest forecast run (points are only future months)
         best_run_id = s.scalar(
@@ -314,6 +318,8 @@ def _cpi_context() -> dict:
         # tables
         cpi_table=cpi_table,
         cpi_movers=cpi_movers,
+        # seasonal analysis
+        monthly_changes=monthly_changes,
     )
 
 def build_cpi_subseries(label_list: List[str]) -> Tuple[List[dict], Dict[str, List[float]], List[dict]]:

@@ -159,7 +159,142 @@
 
     </div>
   </section>
+  <section class="card card--chart" style="margin-top:1rem">
+    <div class="card-body">
+      <div class="rowhead">
+        <h2>Meðaltal mánaðarlegrar CPI hækkunar eftir mánuði</h2>
+        <small class="muted" id="seasonal-range-label"></small>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:.5rem">
+        <label for="seasonal-slider" class="muted small">Fjöldi ára:</label>
+        <input id="seasonal-slider" type="range" min="2" step="1"
+               style="flex:1;min-width:120px;max-width:320px">
+        <span id="seasonal-year-val" style="min-width:3ch;text-align:right;font-variant-numeric:tabular-nums"></span>
+      </div>
+
+      <div class="chart-box chart-box--md">
+        <canvas id="seasonalChart"></canvas>
+      </div>
+
+      <table class="stats" id="seasonal-table" style="margin-top:.75rem;font-size:.85rem">
+        <thead>
+          <tr>
+            <th>Mánuður</th>
+            <th class="num">Meðaltal</th>
+            <th class="num">Miðgildi</th>
+            <th class="num">Lægst</th>
+            <th class="num">Hæst</th>
+            <th class="num">N</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
 </main>
+
+<script>
+(function () {
+  const RAW = {{ monthly_changes|tojson }};
+  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','Maí','Jún','Júl','Ágú','Sep','Okt','Nóv','Des'];
+
+  const slider   = document.getElementById('seasonal-slider');
+  const yearVal  = document.getElementById('seasonal-year-val');
+  const rangeLabel = document.getElementById('seasonal-range-label');
+  const tbody    = document.querySelector('#seasonal-table tbody');
+
+  // Determine year range from data
+  const allYears = [...new Set(RAW.map(d => d.year))].sort((a,b)=>a-b);
+  const maxYears = allYears.length;
+  slider.max = maxYears;
+  slider.value = Math.min(10, maxYears);
+
+  // Build Chart.js bar chart
+  const ctx = document.getElementById('seasonalChart').getContext('2d');
+  const chart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: MONTH_NAMES, datasets: [] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: item => `${item.parsed.y.toFixed(3)}%`
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,.06)' }, ticks: { color: '#9fb0c2' } },
+        y: {
+          grid: { color: 'rgba(255,255,255,.06)' },
+          ticks: { color: '#9fb0c2', callback: v => v.toFixed(2) + '%' }
+        }
+      }
+    }
+  });
+
+  function computeStats(nYears) {
+    const maxYear = Math.max(...allYears);
+    const minYear = maxYear - nYears + 1;
+    const filtered = RAW.filter(d => d.year >= minYear);
+
+    const byMonth = Array.from({length: 12}, () => []);
+    for (const d of filtered) byMonth[d.month - 1].push(d.change);
+
+    return byMonth.map(vals => {
+      if (!vals.length) return null;
+      const sorted = [...vals].sort((a,b) => a-b);
+      const n = sorted.length;
+      const avg = vals.reduce((s,v) => s+v, 0) / n;
+      const med = n % 2 ? sorted[Math.floor(n/2)] : (sorted[n/2-1] + sorted[n/2]) / 2;
+      return { avg, med, min: sorted[0], max: sorted[n-1], n };
+    });
+  }
+
+  function update() {
+    const nYears = parseInt(slider.value);
+    yearVal.textContent = nYears;
+
+    const maxYear = Math.max(...allYears);
+    const minYear = maxYear - nYears + 1;
+    rangeLabel.textContent = `${minYear}–${maxYear}`;
+
+    const stats = computeStats(nYears);
+    const avgs = stats.map(s => s ? parseFloat(s.avg.toFixed(4)) : null);
+
+    // colour bars: positive = warm red, negative = cool blue
+    const colors = avgs.map(v => v == null ? '#555'
+      : v >= 0 ? `rgba(255,${Math.round(80 - Math.min(v,3)/3*60)},80,.75)`
+               : `rgba(80,160,255,.75)`);
+
+    chart.data.datasets = [{
+      data: avgs,
+      backgroundColor: colors,
+      borderColor: colors.map(c => c.replace('.75)', '1)')),
+      borderWidth: 1,
+    }];
+    chart.update('none');
+
+    // table
+    tbody.innerHTML = stats.map((s, i) => s ? `
+      <tr>
+        <td>${MONTH_NAMES[i]}</td>
+        <td class="num ${s.avg >= 0 ? 'pos' : 'neg'}">${s.avg.toFixed(3)}%</td>
+        <td class="num">${s.med.toFixed(3)}%</td>
+        <td class="num ${s.min < 0 ? 'neg' : ''}">${s.min.toFixed(3)}%</td>
+        <td class="num pos">${s.max.toFixed(3)}%</td>
+        <td class="num">${s.n}</td>
+      </tr>` : ''
+    ).join('');
+  }
+
+  slider.addEventListener('input', update);
+  update();
+})();
+</script>
 
 <footer class="footer">
   <div class="wrap"><small class="muted"><a href="{{ url_for('index') }}">← Til baka</a></small></div>
