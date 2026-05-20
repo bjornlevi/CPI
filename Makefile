@@ -5,7 +5,7 @@ PIDFILE=.flask.pid
 HOST=127.0.0.1
 PORT=5000
 
-.PHONY: venv install dev-start dev-stop dev-restart dev-status web
+.PHONY: venv install dev-start dev-stop dev-restart dev-status web get_data clean db-shell logs
 
 venv:
 	python3 -m venv $(VENV)
@@ -50,10 +50,18 @@ dev-status:
 	  echo "Not running."; \
 	fi
 
-.PHONY: web
 web: install
 	FLASK_APP=cpi_app.app:create_app FLASK_RUN_HOST=$(HOST) FLASK_RUN_PORT=$(PORT) $(FLASK) run --debug
 
-.PHONY: get_data
 get_data: install
 	$(PY) -m cpi_app.jobs.fetch_all
+
+clean:
+	rm -f $(PIDFILE) .flask.log
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+
+db-shell:
+	sqlite3 cpi_app/data/cpi.sqlite
+
+logs:
+	tail -f logs/cpi.log

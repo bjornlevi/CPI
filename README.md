@@ -4,7 +4,7 @@ python3 -m venv .venv
 pip install -U pip wheel
 pip install -r requirements.txt
 
-# run the updater script (logs to ./logs/cpi.log)
+# run the updater script from the project root (logs to ./logs/cpi.log)
 ./run_cpi.sh
 
 # one-time fetch to populate SQLite (and you can backfill too)
