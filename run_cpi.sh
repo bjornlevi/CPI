@@ -18,6 +18,7 @@ mkdir -p "$LOG_DIR"
 
 # Run once (no overlap) and log everything
 flock -n "$LOCK_FILE" bash -c "
+  cd \"$DIR\"
   echo \"--- \$(date -Iseconds) starting $MODULE ---\" >> \"$LOG_FILE\"
   \"$PY\" -m \"$MODULE\" >> \"$LOG_FILE\" 2>&1
   echo \"--- \$(date -Iseconds) finished $MODULE ---\" >> \"$LOG_FILE\"
